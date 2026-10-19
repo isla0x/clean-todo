@@ -54,3 +54,44 @@ jobs:
           git add -A
           git commit -qm "CI 결과 ${{ github.sha }}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-output
+
+  # 아이폰 빌드가 되는지만 확인해요(서명 없이). 맥 시간이 비싸서
+  # 커밋 메시지에 [ios] 가 들어 있거나 직접 실행했을 때만 돌아요.
+  ios-build:
+    if: contains(github.event.head_commit.message, '[ios]') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 결과 모아둘 폴더
+        run: mkdir -p "$RUNNER_TEMP/out"
+
+      - name: 환경 정보
+        run: |
+          flutter --version 2>&1 | tee "$RUNNER_TEMP/out/flutter_version.txt"
+          xcodebuild -version 2>&1 | tee "$RUNNER_TEMP/out/xcode_version.txt"
+
+      - name: 패키지 받기
+        run: flutter pub get 2>&1 | tee "$RUNNER_TEMP/out/pub_get.txt"
+
+      - name: 아이폰 빌드(서명 없음)
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign 2>&1 | tee "$RUNNER_TEMP/out/build_ios.txt"
+
+      - name: 결과를 ci-ios-output 브랜치에 올리기
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/out"
+          git init -q -b ci-ios-output
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -qm "iOS 빌드 결과 ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-ios-output
