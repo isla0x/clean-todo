@@ -15,5 +15,9 @@ import UserNotifications
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // 위젯·결제·체험 기간을 다루는 연결 통로
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "HaruNative") {
+      HaruNative.shared.attach(messenger: registrar.messenger())
+    }
   }
 }

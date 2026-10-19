@@ -1,0 +1,2 @@
+// 앱 버전(이름·빌드 번호)을 Flutter 설정에서 그대로 가져와요.
+#include? "../Flutter/Generated.xcconfig"

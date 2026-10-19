@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0A0A0A00000000000001016 /* HaruModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001015 /* HaruModels.swift */; };
+		A0A0A0A00000000000001018 /* HaruComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001017 /* HaruComponents.swift */; };
+		A0A0A0A0000000000000101A /* HaruRoutineViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001019 /* HaruRoutineViews.swift */; };
+		A0A0A0A0000000000000101C /* HaruScheduleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A0000000000000101B /* HaruScheduleViews.swift */; };
+		A0A0A0A0000000000000101E /* HaruTodoViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A0000000000000101D /* HaruTodoViews.swift */; };
+		A0A0A0A00000000000001020 /* HaruWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A0000000000000101F /* HaruWidgets.swift */; };
+		A0A0A0A00000000000001022 /* ToggleIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001021 /* ToggleIntent.swift */; };
+		A0A0A0A00000000000001002 /* HaruWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001001 /* HaruWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0A0A0A00000000000001013 /* HaruNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A0A0A00000000000001012 /* HaruNative.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
@@ -19,6 +28,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		A0A0A0A00000000000001006 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0A0A0A00000000000001005;
+			remoteInfo = HaruWidgetExtension;
+		};
 		331C8085294A63A400263BE5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
@@ -37,6 +53,17 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A0A0A00000000000001003 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A0A0A0A00000000000001002 /* HaruWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -59,6 +86,19 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0A0A0A00000000000001001 /* HaruWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaruWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0A0A0A00000000000001015 /* HaruModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruModels.swift; sourceTree = "<group>"; };
+		A0A0A0A00000000000001017 /* HaruComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruComponents.swift; sourceTree = "<group>"; };
+		A0A0A0A00000000000001019 /* HaruRoutineViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruRoutineViews.swift; sourceTree = "<group>"; };
+		A0A0A0A0000000000000101B /* HaruScheduleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruScheduleViews.swift; sourceTree = "<group>"; };
+		A0A0A0A0000000000000101D /* HaruTodoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruTodoViews.swift; sourceTree = "<group>"; };
+		A0A0A0A0000000000000101F /* HaruWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruWidgets.swift; sourceTree = "<group>"; };
+		A0A0A0A00000000000001021 /* ToggleIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleIntent.swift; sourceTree = "<group>"; };
+		A0A0A0A0000000000000100F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0A0A0A00000000000001010 /* HaruWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaruWidget.entitlements; sourceTree = "<group>"; };
+		A0A0A0A00000000000001011 /* Widget.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Widget.xcconfig; sourceTree = "<group>"; };
+		A0A0A0A00000000000001012 /* HaruNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaruNative.swift; sourceTree = "<group>"; };
+		A0A0A0A00000000000001014 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +107,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A0A0A00000000000001009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +147,7 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				A0A0A0A00000000000001004 /* HaruWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -108,6 +156,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				A0A0A0A00000000000001001 /* HaruWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -124,8 +173,27 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				A0A0A0A00000000000001012 /* HaruNative.swift */,
+				A0A0A0A00000000000001014 /* Runner.entitlements */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		A0A0A0A00000000000001004 /* HaruWidget */ = {
+			isa = PBXGroup;
+			children = (
+				A0A0A0A00000000000001015 /* HaruModels.swift */,
+				A0A0A0A00000000000001017 /* HaruComponents.swift */,
+				A0A0A0A00000000000001019 /* HaruRoutineViews.swift */,
+				A0A0A0A0000000000000101B /* HaruScheduleViews.swift */,
+				A0A0A0A0000000000000101D /* HaruTodoViews.swift */,
+				A0A0A0A0000000000000101F /* HaruWidgets.swift */,
+				A0A0A0A00000000000001021 /* ToggleIntent.swift */,
+				A0A0A0A0000000000000100F /* Info.plist */,
+				A0A0A0A00000000000001010 /* HaruWidget.entitlements */,
+				A0A0A0A00000000000001011 /* Widget.xcconfig */,
+			);
+			path = HaruWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -157,11 +225,13 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				A0A0A0A00000000000001003 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A0A0A0A00000000000001007 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -170,6 +240,23 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A0A0A0A00000000000001005 /* HaruWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0A0A0A0000000000000100B /* Build configuration list for PBXNativeTarget "HaruWidgetExtension" */;
+			buildPhases = (
+				A0A0A0A00000000000001008 /* Sources */,
+				A0A0A0A00000000000001009 /* Frameworks */,
+				A0A0A0A0000000000000100A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HaruWidgetExtension;
+			productName = HaruWidgetExtension;
+			productReference = A0A0A0A00000000000001001 /* HaruWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -188,6 +275,9 @@
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
+					};
+					A0A0A0A00000000000001005 = {
+						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
@@ -209,6 +299,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				A0A0A0A00000000000001005 /* HaruWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -229,6 +320,13 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A0A0A0000000000000100A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,6 +382,21 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				A0A0A0A00000000000001013 /* HaruNative.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0A0A0A00000000000001008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0A0A0A00000000000001016 /* HaruModels.swift in Sources */,
+				A0A0A0A00000000000001018 /* HaruComponents.swift in Sources */,
+				A0A0A0A0000000000000101A /* HaruRoutineViews.swift in Sources */,
+				A0A0A0A0000000000000101C /* HaruScheduleViews.swift in Sources */,
+				A0A0A0A0000000000000101E /* HaruTodoViews.swift in Sources */,
+				A0A0A0A00000000000001020 /* HaruWidgets.swift in Sources */,
+				A0A0A0A00000000000001022 /* ToggleIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,6 +407,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		A0A0A0A00000000000001007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0A0A0A00000000000001005 /* HaruWidgetExtension */;
+			targetProxy = A0A0A0A00000000000001006 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -378,6 +496,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -560,6 +679,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -583,6 +703,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -596,6 +717,92 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		A0A0A0A0000000000000100C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A0A0A0A00000000000001011 /* Widget.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = HaruWidget/HaruWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = NKYCSPGTQ7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaruWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.isla0x.cleanTodo.HaruWidget;
+				PRODUCT_NAME = HaruWidget;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A0A0A0A0000000000000100D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A0A0A0A00000000000001011 /* Widget.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = HaruWidget/HaruWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = NKYCSPGTQ7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaruWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.isla0x.cleanTodo.HaruWidget;
+				PRODUCT_NAME = HaruWidget;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A0A0A0A0000000000000100E /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A0A0A0A00000000000001011 /* Widget.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = HaruWidget/HaruWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = NKYCSPGTQ7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HaruWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.isla0x.cleanTodo.HaruWidget;
+				PRODUCT_NAME = HaruWidget;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
 		};
 /* End XCBuildConfiguration section */
 
@@ -626,6 +833,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A0A0A0A0000000000000100B /* Build configuration list for PBXNativeTarget "HaruWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0A0A0A0000000000000100C /* Debug */,
+				A0A0A0A0000000000000100D /* Release */,
+				A0A0A0A0000000000000100E /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

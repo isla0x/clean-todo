@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -440,6 +441,9 @@ class ItemStore extends ChangeNotifier {
     notifyListeners();
     // 앱을 켤 때마다 예약 목록을 현재 항목에 맞게 다시 만들어요.
     Notifier.instance.rescheduleAll(items);
+    // 위젯에서 체크해 둔 내용을 가져오고, 위젯에도 최신 목록을 알려줘요.
+    await pullFromWidgets();
+    unawaited(WidgetBridge.push(items));
   }
 
   Future<void> _save() async {
@@ -448,6 +452,48 @@ class ItemStore extends ChangeNotifier {
       _storageKey,
       jsonEncode(items.map((e) => e.toJson()).toList()),
     );
+    // 위젯이 같은 목록을 보도록 아이폰 공유 저장소에도 적어둬요.
+    unawaited(WidgetBridge.push(items));
+  }
+
+  /// 위젯에서 체크한 내용을 앱 데이터에 반영해요. 바뀐 게 있으면 true
+  Future<bool> pullFromWidgets() async {
+    final toggles = await WidgetBridge.takeToggles();
+    if (toggles.isEmpty) return false;
+    var changed = false;
+    for (final t in toggles) {
+      final id = t['id'];
+      final day = t['day'];
+      final done = t['done'] == true;
+      if (id is! String || day is! String) continue;
+      final found = items.where((e) => e.id == id);
+      if (found.isEmpty) continue;
+      final item = found.first;
+      if (item.isDoneOn(day) == done) continue;
+      changed = true;
+      if (item.isRoutine) {
+        if (done) {
+          item.doneDates.add(day);
+        } else {
+          item.doneDates.remove(day);
+        }
+      } else {
+        item.done = done;
+        item.doneOn = done ? day : null;
+        if (item.notify) {
+          if (done) {
+            Notifier.instance.cancel(item);
+          } else {
+            Notifier.instance.schedule(item);
+          }
+        }
+      }
+    }
+    if (changed) {
+      if (!_disposed) notifyListeners();
+      await _save();
+    }
+    return changed;
   }
 
   /// 항목 내용을 바꾼 뒤 화면을 다시 그리고 저장해요.
@@ -494,6 +540,152 @@ class ItemStore extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+}
+
+// ───────────────────────── 아이폰 기능 연결 (위젯·결제) ─────────────────────────
+//
+// 위젯, 결제(하루링 PRO), 3일 체험 기간은 아이폰 자체 기능이라 Swift 쪽
+// (ios/Runner/HaruNative.swift)에서 처리하고, 여기서는 말만 걸어요.
+
+const MethodChannel _native = MethodChannel('haruring/native');
+
+bool get _onIphone => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+class WidgetBridge {
+  /// 항목 목록과 PRO 상태를 위젯이 읽는 공유 저장소에 적고, 위젯을 새로 그리게 해요.
+  static Future<void> push(List<Item> items) async {
+    if (!_onIphone) return;
+    try {
+      await _native.invokeMethod<void>('widgetSync', {
+        'items': jsonEncode(items.map((e) => e.toJson()).toList()),
+        'pro': jsonEncode(ProManager.instance.widgetJson()),
+      });
+    } catch (e) {
+      debugPrint('위젯 동기화 실패: $e');
+    }
+  }
+
+  /// 위젯에서 체크한 기록을 가져와요. (가져가면 비워져요)
+  static Future<List<Map<String, dynamic>>> takeToggles() async {
+    if (!_onIphone) return const [];
+    try {
+      final raw = await _native.invokeMethod<String>('takeToggles');
+      if (raw == null || raw.isEmpty) return const [];
+      return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('위젯 체크 기록 읽기 실패: $e');
+      return const [];
+    }
+  }
+
+  /// 잠긴 위젯을 눌러서 들어온 주소(haruring://pro)를 한 번만 꺼내요.
+  static Future<String?> takePendingLink() async {
+    if (!_onIphone) return null;
+    try {
+      return await _native.invokeMethod<String>('takePendingLink');
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+/// 하루링 PRO(위젯) 상태: 3일 무료 체험 + 한 번 결제.
+/// 체험 시작일은 아이폰 키체인에 남아서 앱을 지웠다 깔아도 다시 체험할 수 없어요.
+class ProManager extends ChangeNotifier {
+  ProManager._();
+
+  static final ProManager instance = ProManager._();
+
+  static const int trialDays = 3;
+  static const String fallbackPrice = '₩3,300';
+
+  DateTime? trialStart;
+  bool purchased = false;
+  String price = fallbackPrice;
+  bool busy = false;
+
+  DateTime? get trialEnd => trialStart?.add(const Duration(days: trialDays));
+  bool get trialStarted => trialStart != null;
+  bool get trialActive {
+    final end = trialEnd;
+    return end != null && DateTime.now().isBefore(end);
+  }
+
+  bool get isPro => purchased || trialActive;
+
+  Map<String, dynamic> widgetJson() => {
+        'purchased': purchased,
+        'trialStart': trialStart?.millisecondsSinceEpoch ?? 0,
+        'trialEnd': trialEnd?.millisecondsSinceEpoch ?? 0,
+        'price': price,
+      };
+
+  /// 구입 여부·체험 시작일을 아이폰에서 다시 읽어와요.
+  Future<void> load() async {
+    if (!_onIphone) return;
+    try {
+      final m = await _native.invokeMapMethod<String, dynamic>('proStatus');
+      if (m == null) return;
+      purchased = m['purchased'] == true;
+      final start = m['trialStart'];
+      trialStart =
+          start is int ? DateTime.fromMillisecondsSinceEpoch(start) : null;
+      final p = m['price'];
+      if (p is String && p.isNotEmpty) price = p;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('PRO 상태 읽기 실패: $e');
+    }
+  }
+
+  Future<void> startTrial() async {
+    if (trialStarted) return;
+    if (_onIphone) {
+      try {
+        final ms = await _native.invokeMethod<int>('startTrial');
+        if (ms != null) trialStart = DateTime.fromMillisecondsSinceEpoch(ms);
+      } catch (e) {
+        debugPrint('체험 시작 실패: $e');
+      }
+    } else {
+      trialStart = DateTime.now();
+    }
+    notifyListeners();
+  }
+
+  /// "purchased" / "cancelled" / "pending" / "error:이유"
+  Future<String> buy() async {
+    if (!_onIphone) return 'error:iphone';
+    busy = true;
+    notifyListeners();
+    try {
+      final r = await _native.invokeMethod<String>('purchase') ?? 'error:empty';
+      if (r == 'purchased') purchased = true;
+      return r;
+    } on PlatformException catch (e) {
+      return 'error:${e.message}';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// 예전에 한 결제를 되살려요. 복원할 구입이 있으면 true
+  Future<bool> restore() async {
+    if (!_onIphone) return false;
+    busy = true;
+    notifyListeners();
+    try {
+      final ok = await _native.invokeMethod<bool>('restore') ?? false;
+      if (ok) purchased = true;
+      return ok;
+    } on PlatformException {
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 }
 
@@ -663,6 +855,10 @@ class RootPage extends StatefulWidget {
 class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   final ItemStore _store = ItemStore();
   Timer? _ticker;
+  bool _proSheetOpen = false;
+
+  // 체험·구입 상태가 바뀌면 위젯에도 바로 알려줘요.
+  void _syncWidgets() => WidgetBridge.push(_store.items);
 
   @override
   void initState() {
@@ -672,21 +868,56 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _store.touch();
     });
-    _store.load();
+    ProManager.instance.addListener(_syncWidgets);
+    if (_onIphone) {
+      _native.setMethodCallHandler((call) async {
+        switch (call.method) {
+          case 'linkAvailable':
+            await _checkLink();
+          case 'proChanged':
+            await ProManager.instance.load();
+        }
+        return null;
+      });
+    }
+    // 체험 상태를 먼저 읽고, 그다음 목록을 불러와요(위젯에 둘 다 알려야 해서).
+    ProManager.instance.load().then((_) => _store.load());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLink());
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    ProManager.instance.removeListener(_syncWidgets);
     WidgetsBinding.instance.removeObserver(this);
     _store.dispose();
     super.dispose();
   }
 
-  // 자정이 지나 앱으로 돌아왔을 때 "오늘" 기준으로 다시 그리기
+  // 자정이 지나 앱으로 돌아왔을 때 "오늘" 기준으로 다시 그리기.
+  // 위젯에서 체크한 것과 체험·결제 상태도 이때 새로 읽어요.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _store.touch();
+    if (state == AppLifecycleState.resumed) {
+      _store.touch();
+      _store.pullFromWidgets();
+      ProManager.instance.load();
+      _checkLink();
+    }
+  }
+
+  /// 잠긴 위젯을 눌러서 들어왔으면 PRO 화면을 열어요.
+  Future<void> _checkLink() async {
+    final link = await WidgetBridge.takePendingLink();
+    if (link == null || !mounted) return;
+    if (Uri.tryParse(link)?.host == 'pro') await _openPro();
+  }
+
+  Future<void> _openPro() async {
+    if (_proSheetOpen || !mounted) return;
+    _proSheetOpen = true;
+    await showProSheet(context);
+    _proSheetOpen = false;
   }
 
   @override
@@ -863,6 +1094,7 @@ class TodayPage extends StatelessWidget {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('오늘'),
+                trailing: const _ProNavButton(),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
               ),
               SliverToBoxAdapter(
@@ -3214,6 +3446,952 @@ class _StreakRow extends StatelessWidget {
                   if (i > 0) const SizedBox(width: 8),
                   dots[i],
                 ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────── PRO 화면 ─────────────────────────
+//
+// 위젯은 하루링 PRO 기능이에요. 3일 무료 체험이 끝나면 위젯이 잠기고,
+// ₩3,300을 한 번 결제하면 계속 쓸 수 있어요. (구독 아님)
+
+/// 오늘 화면 위쪽의 작은 PRO 버튼
+class _ProNavButton extends StatelessWidget {
+  const _ProNavButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final soft = CupertinoDynamicColor.resolve(kAccentSoft, context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        showProSheet(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: soft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _GridGlyph(size: 13, color: deep),
+            const SizedBox(width: 5),
+            Text(
+              'PRO',
+              style: _font(12, FontWeight.w700, letterSpacing: 0.3)
+                  .copyWith(color: deep),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 네모 네 개 모양 (PRO 아이콘)
+class _GridGlyph extends StatelessWidget {
+  const _GridGlyph({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _GridGlyphPainter(color),
+    );
+  }
+}
+
+class _GridGlyphPainter extends CustomPainter {
+  _GridGlyphPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final u = size.width / 38;
+    void box(double x, double y, double opacity) {
+      final paint = Paint()..color = color.withValues(alpha: opacity);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x * u, y * u, 12.5 * u, 12.5 * u),
+          Radius.circular(3.6 * u),
+        ),
+        paint,
+      );
+    }
+
+    box(5, 5, 1);
+    box(20.5, 5, 0.7);
+    box(5, 20.5, 0.7);
+    box(20.5, 20.5, 1);
+  }
+
+  @override
+  bool shouldRepaint(_GridGlyphPainter old) => old.color != color;
+}
+
+Future<void> showProSheet(BuildContext context) {
+  return showCupertinoModalPopup<void>(
+    context: context,
+    builder: (_) => const _ProSheet(),
+  );
+}
+
+enum _ProView { intro, trial, ended, purchased }
+
+class _ProSheet extends StatefulWidget {
+  const _ProSheet();
+
+  @override
+  State<_ProSheet> createState() => _ProSheetState();
+}
+
+class _ProSheetState extends State<_ProSheet> {
+  final ProManager pro = ProManager.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    pro.load();
+  }
+
+  _ProView get _view {
+    if (pro.purchased) return _ProView.purchased;
+    if (pro.trialActive) return _ProView.trial;
+    if (pro.trialStarted) return _ProView.ended;
+    return _ProView.intro;
+  }
+
+  Future<void> _notice(String title, [String? message]) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(title),
+        content: message == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(message),
+              ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startTrial() async {
+    HapticFeedback.mediumImpact();
+    await pro.startTrial();
+  }
+
+  Future<void> _buy() async {
+    HapticFeedback.mediumImpact();
+    final result = await pro.buy();
+    if (!mounted) return;
+    switch (result) {
+      case 'purchased':
+        await _notice('하루링 PRO가 열렸어요', '위젯을 계속 쓸 수 있어요. 고마워요!');
+      case 'cancelled':
+        break;
+      case 'pending':
+        await _notice('결제 승인을 기다리고 있어요', '승인되면 자동으로 PRO가 열려요.');
+      case 'error:iphone':
+        await _notice('아이폰에서만 결제할 수 있어요');
+      case 'error:product':
+        await _notice('상품 정보를 불러오지 못했어요', '잠시 뒤에 다시 시도해 주세요.');
+      default:
+        await _notice('결제를 끝내지 못했어요', '잠시 뒤에 다시 시도해 주세요.');
+    }
+  }
+
+  Future<void> _restore() async {
+    final ok = await pro.restore();
+    if (!mounted) return;
+    if (ok) {
+      await _notice('구입을 복원했어요', '하루링 PRO가 다시 열렸어요.');
+    } else {
+      await _notice('복원할 구입 내역이 없어요', '같은 Apple 계정으로 결제한 적이 있는지 확인해 주세요.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+
+    return ListenableBuilder(
+      listenable: pro,
+      builder: (context, _) {
+        final view = _view;
+        return Container(
+          height: mq.size.height - mq.padding.top - 6,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x2E000000),
+                blurRadius: 24,
+                offset: Offset(0, -2),
+              ),
+            ],
+          ),
+          child: DefaultTextStyle(
+            style: _font(15, FontWeight.w400).copyWith(color: label),
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.only(top: 26, bottom: 16),
+                        child: _buildContent(context, view),
+                      ),
+                    ),
+                    if (view != _ProView.purchased)
+                      _buildBottom(context, view, mq.padding.bottom),
+                    if (view == _ProView.purchased)
+                      SizedBox(height: mq.padding.bottom + 8),
+                  ],
+                ),
+                Positioned(
+                  top: 7,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      width: 36,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemGrey4.resolveFrom(context),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 14,
+                  right: 16,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemGrey5.resolveFrom(context),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        CupertinoIcons.xmark,
+                        size: 13,
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, _ProView view) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final subtitle = switch (view) {
+      _ProView.intro => '아래 위젯을 3일 동안 무료로 써보세요',
+      _ProView.trial => null,
+      _ProView.ended => '체험이 끝났어요. 계속 쓰려면 한 번만 결제하세요',
+      _ProView.purchased => '위젯을 마음껏 쓰세요. 고마워요!',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: kAccent,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x5955A0FA),
+                  blurRadius: 16,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const _GridGlyph(size: 30, color: CupertinoColors.white),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Center(
+          child: Text(
+            '하루링 PRO',
+            style: _font(26, FontWeight.w700, letterSpacing: 0.3).copyWith(
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: _font(15, FontWeight.w400).copyWith(color: secondary),
+            ),
+          ),
+        ],
+        if (view != _ProView.intro) ...[
+          const SizedBox(height: 16),
+          _buildStatusCard(context, view),
+          if (view != _ProView.ended)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 10, 32, 0),
+              child: Text(
+                '홈 화면을 길게 누르고 왼쪽 위 + 버튼을 눌러 "하루링"을 찾아 추가해 보세요. '
+                '잠금화면은 시계 아래 칸을 눌러 추가해요.',
+                textAlign: TextAlign.center,
+                style: _font(12, FontWeight.w400).copyWith(color: secondary),
+              ),
+            ),
+        ],
+        const SizedBox(height: 16),
+        _sectionLabel(context, '홈 화면 위젯'),
+        const _HomePreviewRow(),
+        const SizedBox(height: 14),
+        _sectionLabel(context, '잠금화면 위젯 · 5종'),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: _LockPreview(),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 0, 16, 7),
+      child: Text(
+        text,
+        style: _font(12, FontWeight.w400).copyWith(
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(BuildContext context, _ProView view) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final soft = CupertinoDynamicColor.resolve(kAccentSoft, context);
+    final grey = CupertinoColors.systemGrey5.resolveFrom(context);
+
+    var chip = '무료 체험 중';
+    var headline = '';
+    var detail = '';
+    var filled = 0;
+    var chipColor = deep;
+    var chipBg = soft;
+
+    if (view == _ProView.trial) {
+      final end = pro.trialEnd!;
+      final rem = end.difference(DateTime.now());
+      final days =
+          (rem.inMinutes / 1440).ceil().clamp(1, ProManager.trialDays).toInt();
+      if (rem.inHours >= 24) {
+        headline = '$days일 남았어요';
+      } else if (rem.inHours >= 1) {
+        headline = '${rem.inHours}시간 남았어요';
+      } else {
+        headline = '${rem.inMinutes.clamp(1, 59)}분 남았어요';
+      }
+      filled = rem.inHours >= 24
+          ? ProManager.trialDays - days
+          : ProManager.trialDays - 1;
+      detail =
+          '${end.month}월 ${end.day}일 ${clockLabel(end.hour * 60 + end.minute)}에 끝나요';
+    } else if (view == _ProView.ended) {
+      chip = '체험 종료';
+      chipColor = secondary;
+      chipBg = grey;
+      headline = '위젯이 잠겼어요';
+      detail = '할 일·루틴 기록은 그대로예요. 결제하면 위젯이 다시 열려요.';
+      filled = ProManager.trialDays;
+    } else {
+      chip = 'PRO 이용 중';
+      headline = '결제 완료';
+      detail = '구독이 아니라서 다시 결제할 일이 없어요.';
+      filled = ProManager.trialDays;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: _cardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  chip,
+                  style: _font(13, FontWeight.w600).copyWith(color: chipColor),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                headline,
+                style: _font(18, FontWeight.w700).copyWith(
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+          if (view != _ProView.purchased) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                for (var i = 0; i < ProManager.trialDays; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  Expanded(
+                    child: Container(
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: i < filled
+                            ? (view == _ProView.ended ? secondary : kAccent)
+                            : soft,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            detail,
+            style: _font(13, FontWeight.w400).copyWith(color: secondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottom(BuildContext context, _ProView view, double safeBottom) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final intro = view == _ProView.intro;
+    final price = pro.price;
+
+    final buttonText =
+        intro ? '3일 무료 체험 시작' : '$price · 한 번 결제하고 계속 쓰기';
+    final note = intro
+        ? '3일이 지나면 위젯이 잠겨요. 계속 쓰려면 $price을 한 번만 결제하세요.\n구독도, 자동 결제도 없어요.'
+        : '구독도, 자동 결제도 없어요.\n한 번 결제하면 계속 쓸 수 있어요.';
+
+    TextStyle link() => _font(14, FontWeight.w500).copyWith(color: deep);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 4, 16, safeBottom + 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: pro.busy ? null : (intro ? _startTrial : _buy),
+            child: Container(
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: deep,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: pro.busy
+                  ? const CupertinoActivityIndicator(color: CupertinoColors.white)
+                  : Text(
+                      buttonText,
+                      style: _font(17, FontWeight.w700)
+                          .copyWith(color: CupertinoColors.white),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            note,
+            textAlign: TextAlign.center,
+            style: _font(12, FontWeight.w400).copyWith(color: secondary),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (intro) ...[
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: pro.busy ? null : _buy,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text('바로 구입하기 · $price', style: link()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('·', style: link().copyWith(color: secondary)),
+                ),
+              ],
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: pro.busy ? null : _restore,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text('구입 복원', style: link()),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── 위젯 미리보기 (확정한 위젯 시안을 줄여서 보여줘요) ──
+
+/// 홈 화면 위젯 한 장. 158칸 기준으로 그린 뒤 0.7배로 줄여요.
+class _PreviewCard extends StatelessWidget {
+  const _PreviewCard({required this.width, required this.child});
+
+  final double width;
+  final Widget child;
+
+  static const double _scale = 0.7;
+  static const double _height = 158;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = CupertinoColors.secondarySystemGroupedBackground
+        .resolveFrom(context);
+    return SizedBox(
+      width: width * _scale,
+      height: _height * _scale,
+      child: FittedBox(
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+          child: Container(
+            width: width,
+            height: _height,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: card,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: kCardShadow,
+            ),
+            child: DefaultTextStyle(
+              style: _font(12, FontWeight.w400).copyWith(
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomePreviewRow extends StatelessWidget {
+  const _HomePreviewRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final soft = CupertinoDynamicColor.resolve(kAccentSoft, context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    final now = DateTime.now();
+
+    Widget miniRow(String title, bool done, String streak, {bool flame = false}) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            _CheckCircle(checked: done),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _font(15, FontWeight.w400).copyWith(color: label),
+              ),
+            ),
+            if (flame) ...[
+              const _FlameIcon(size: 13),
+              const SizedBox(width: 3),
+            ],
+            Text(streak, style: _font(12, FontWeight.w400).copyWith(color: secondary)),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Row(
+        children: [
+          // 작게 · 오늘 루틴
+          _PreviewCard(
+            width: 158,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('오늘 루틴',
+                    style: _font(12, FontWeight.w600).copyWith(color: secondary)),
+                const Spacer(),
+                Center(
+                  child: SizedBox(
+                    width: 84,
+                    height: 84,
+                    child: CustomPaint(
+                      painter: _RingPainter(
+                        progress: 2 / 3,
+                        track: soft,
+                        tint: kAccent,
+                        stroke: 9,
+                      ),
+                      child: Center(
+                        child: Text('2/3',
+                            style: _font(20, FontWeight.w700)
+                                .copyWith(color: label)),
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 작게 · 다음 일정
+          _PreviewCard(
+            width: 158,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: soft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('다음 일정',
+                      style: _font(11, FontWeight.w600).copyWith(color: deep)),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: kAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('점심약속',
+                            style: _font(16, FontWeight.w600)
+                                .copyWith(color: label)),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 18, top: 4),
+                      child: Text('2시간 40분 후 시작',
+                          style: _font(12, FontWeight.w400)
+                              .copyWith(color: secondary)),
+                    ),
+                  ],
+                ),
+                Text('오후 2:00',
+                    style: _font(12, FontWeight.w600).copyWith(color: deep)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 중간 · 오늘 루틴
+          _PreviewCard(
+            width: 338,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('오늘 · ${now.month}월 ${now.day}일',
+                        style: _font(12, FontWeight.w600)
+                            .copyWith(color: secondary)),
+                    Text('2/3 완료',
+                        style: _font(12, FontWeight.w400)
+                            .copyWith(color: secondary)),
+                  ],
+                ),
+                miniRow('물 2L 마시기', true, '12일 연속', flame: true),
+                miniRow('스트레칭 10분', true, '5일 연속'),
+                miniRow('영어 단어 20개', false, '3일 연속'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({
+    required this.progress,
+    required this.track,
+    required this.tint,
+    required this.stroke,
+  });
+
+  final double progress;
+  final Color track;
+  final Color tint;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final arc = rect.deflate(stroke / 2);
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = track;
+    canvas.drawArc(arc, 0, 6.2831853, false, base);
+    if (progress > 0) {
+      final top = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..color = tint;
+      canvas.drawArc(arc, -1.5707963, 6.2831853 * progress, false, top);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress ||
+      old.track != track ||
+      old.tint != tint ||
+      old.stroke != stroke;
+}
+
+/// 잠금화면 위젯 5종 미리보기 (어두운 배경 위)
+class _LockPreview extends StatelessWidget {
+  const _LockPreview();
+
+  static const Color _white = CupertinoColors.white;
+
+  Widget _glass({required Widget child, double radius = 16}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0x2EFFFFFF),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _circle(Widget child) {
+    return Container(
+      width: 62,
+      height: 62,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: Color(0x2EFFFFFF),
+        shape: BoxShape.circle,
+      ),
+      child: child,
+    );
+  }
+
+  Widget _line(
+    IconData icon,
+    String text, {
+    String? time,
+    bool strike = false,
+    bool flame = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: _white),
+          const SizedBox(width: 5),
+          if (time != null) ...[
+            Text(time,
+                style: _font(12, FontWeight.w700).copyWith(color: _white)),
+            const SizedBox(width: 5),
+          ],
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _font(12, FontWeight.w500).copyWith(
+                color: _white,
+                decoration: strike ? TextDecoration.lineThrough : null,
+                decorationColor: _white,
+              ),
+            ),
+          ),
+          if (flame)
+            const Icon(CupertinoIcons.flame_fill, size: 11, color: _white),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(
+            begin: Alignment(-0.3, -1),
+            end: Alignment(0.3, 1),
+            colors: [Color(0xFF2A4A7C), Color(0xFF1A2E54), Color(0xFF0E192F)],
+            stops: [0, 0.48, 1],
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _glass(
+                    child: Column(
+                      children: [
+                        _line(CupertinoIcons.circle, '점심약속', time: '2:00'),
+                        _line(CupertinoIcons.circle, '택배 반품 접수', time: '4:30'),
+                        _line(CupertinoIcons.circle, '영어 스터디', time: '7:00'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _glass(
+                    child: Column(
+                      children: [
+                        _line(CupertinoIcons.check_mark_circled_solid,
+                            '물 2L 마시기',
+                            strike: true, flame: true),
+                        _line(CupertinoIcons.check_mark_circled_solid,
+                            '스트레칭 10분',
+                            strike: true),
+                        _line(CupertinoIcons.circle, '영어 단어 20개'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _circle(
+                  SizedBox(
+                    width: 50,
+                    height: 50,
+                    child: CustomPaint(
+                      painter: _RingPainter(
+                        progress: 2 / 3,
+                        track: const Color(0x40FFFFFF),
+                        tint: _white,
+                        stroke: 4,
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('루틴',
+                                style: _font(8, FontWeight.w600)
+                                    .copyWith(color: _white)),
+                            Text('2/3',
+                                style: _font(14, FontWeight.w700)
+                                    .copyWith(color: _white)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _circle(
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(CupertinoIcons.flame_fill,
+                          size: 15, color: _white),
+                      Text('12일',
+                          style: _font(14, FontWeight.w700)
+                              .copyWith(color: _white)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    '점심약속 · 오후 2:00',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _font(14, FontWeight.w500).copyWith(color: _white),
+                  ),
+                ),
               ],
             ),
           ],
