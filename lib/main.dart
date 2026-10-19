@@ -76,7 +76,12 @@ class TodoApp extends StatelessWidget {
             (mq.textScaler.scale(1.0) * kTextBoost).clamp(1.0, 1.6).toDouble();
         return MediaQuery(
           data: mq.copyWith(textScaler: TextScaler.linear(scale)),
-          child: child!,
+          // 빈 배경을 누르면 키보드가 내려가요. (목록·버튼은 원래대로 눌려요)
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            child: child!,
+          ),
         );
       },
       home: const RootPage(),
