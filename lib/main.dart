@@ -701,6 +701,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         activeColor: kAccent,
         inactiveColor: CupertinoColors.secondaryLabel,
         iconSize: 26,
+        height: 56, // 기본 50보다 조금 높여서 아이콘 위쪽 여백을 만들어요.
         items: const [
           BottomNavigationBarItem(
             icon: _TabIcon(_TabGlyph.today),
@@ -743,9 +744,13 @@ class _TabIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = IconTheme.of(context);
-    return CustomPaint(
-      size: Size.square(theme.size ?? 26),
-      painter: _TabIconPainter(glyph, theme.color ?? kAccent),
+    return Padding(
+      // 아이콘이 탭바 윗선에 붙어 보이지 않게 위쪽 여백을 더해요.
+      padding: const EdgeInsets.only(top: 4),
+      child: CustomPaint(
+        size: Size.square(theme.size ?? 26),
+        painter: _TabIconPainter(glyph, theme.color ?? kAccent),
+      ),
     );
   }
 }
