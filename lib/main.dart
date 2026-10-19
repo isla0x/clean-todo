@@ -765,7 +765,7 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (streak >= kFlameStreak) ...[
-                        const _FlameIcon(),
+                        const _FlameIcon(size: 14),
                         const SizedBox(width: 3),
                       ],
                       Text(
@@ -822,7 +822,7 @@ const int kFlameStreak = 7;
 
 /// 7일 이상 연속일 때 붙는 작은 불꽃. 다홍 몸통 + 노란 속불꽃.
 class _FlameIcon extends StatelessWidget {
-  const _FlameIcon({this.size = 14});
+  const _FlameIcon({required this.size});
 
   final double size;
 

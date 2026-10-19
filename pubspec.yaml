@@ -9,16 +9,28 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: any
-  flutter_local_notifications: any
-  flutter_timezone: any
-  google_fonts: any
-  shared_preferences: any
-  timezone: any
+  cupertino_icons: ^2.0.0
+  flutter_local_notifications: ^22.3.2
+  flutter_timezone: ^5.1.1
+  google_fonts: ^9.0.0
+  shared_preferences: ^2.5.6
+  timezone: ^0.11.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
 flutter:
-  uses-material-design: false
+  uses-material-design: true
+  fonts:
+    # 한글은 Pretendard (코드의 _font()가 영문·숫자는 Plus Jakarta Sans, 한글은 이 폰트로 보여줘요)
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/Pretendard-Regular.otf
+          weight: 400
+        - asset: assets/fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/Pretendard-Bold.otf
+          weight: 700
