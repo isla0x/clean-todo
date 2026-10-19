@@ -119,7 +119,7 @@ struct DayCell: View {
             }
             .frame(maxWidth: .infinity)
         } else {
-            Color.clear.frame(maxWidth: .infinity, minHeight: 31)
+            Color.clear.frame(maxWidth: .infinity).frame(height: 31)
         }
     }
 }
