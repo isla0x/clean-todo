@@ -52,7 +52,7 @@ class TodoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoApp(
-      title: '오늘',
+      title: '하루링',
       debugShowCheckedModeBanner: false,
       theme: CupertinoThemeData(
         primaryColor: kAccent,
