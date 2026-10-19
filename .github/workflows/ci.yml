@@ -85,6 +85,32 @@ jobs:
           set -o pipefail
           flutter build ios --release --no-codesign 2>&1 | tee "$RUNNER_TEMP/out/build_ios.txt"
 
+      - name: 위젯이 앱 안에 들어갔는지 확인
+        continue-on-error: true
+        run: |
+          {
+            ls -la build/ios/iphoneos/Runner.app/PlugIns
+            plutil -p build/ios/iphoneos/Runner.app/PlugIns/HaruWidget.appex/Info.plist
+          } 2>&1 | tee "$RUNNER_TEMP/out/plugins.txt"
+
+      - name: 위젯 화면 그림 뽑기(시뮬레이터)
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/out/widget_previews"
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          W=ios/HaruWidget
+          xcrun --sdk iphonesimulator swiftc -sdk "$SDK" -target arm64-apple-ios17.0-simulator \
+            -o "$RUNNER_TEMP/harness" \
+            $W/HaruModels.swift $W/HaruComponents.swift $W/HaruRoutineViews.swift \
+            $W/HaruScheduleViews.swift $W/HaruTodoViews.swift $W/ToggleIntent.swift \
+            tools/widget_preview/main.swift > "$RUNNER_TEMP/out/preview_compile.txt" 2>&1 || {
+              cat "$RUNNER_TEMP/out/preview_compile.txt"; exit 1; }
+          DEV=$(xcrun simctl list devices available | grep -m1 "iPhone" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "시뮬레이터: $DEV" | tee "$RUNNER_TEMP/out/preview_run.txt"
+          xcrun simctl boot "$DEV" || true
+          xcrun simctl bootstatus "$DEV" -b > /dev/null 2>&1 || true
+          xcrun simctl spawn "$DEV" "$RUNNER_TEMP/harness" "$RUNNER_TEMP/out/widget_previews" 2>&1 | tee -a "$RUNNER_TEMP/out/preview_run.txt"
+
       - name: 결과를 ci-ios-output 브랜치에 올리기
         if: always()
         run: |
