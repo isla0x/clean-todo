@@ -1305,7 +1305,7 @@ class _ItemRow extends StatelessWidget {
                         ],
                         Text(
                           parts.join(' · '),
-                          style: _font(11, FontWeight.w400)
+                          style: _font(12, FontWeight.w400)
                               .copyWith(color: doneColor),
                         ),
                       ],
@@ -1606,7 +1606,7 @@ class _TimelineRow extends StatelessWidget {
                   child: Text(
                     clockLabel(item.minutes!),
                     style: _font(
-                      11,
+                      12,
                       highlight ? FontWeight.w600 : FontWeight.w400,
                     ).copyWith(color: highlight ? deep : secondary),
                   ),
