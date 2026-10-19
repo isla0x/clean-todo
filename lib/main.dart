@@ -689,15 +689,15 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         iconSize: 26,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.checkmark_circle),
+            icon: _TabIcon(_TabGlyph.today),
             label: '오늘',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.calendar),
+            icon: _TabIcon(_TabGlyph.calendar),
             label: '캘린더',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.chart_bar),
+            icon: _TabIcon(_TabGlyph.stats),
             label: '기록',
           ),
         ],
@@ -713,6 +713,73 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       },
     );
   }
+}
+
+// ───────────────────────── 탭 아이콘 ─────────────────────────
+
+enum _TabGlyph { today, calendar, stats }
+
+/// 탭바 아이콘. 시안과 똑같은 가는 선(1.8) 모양으로 직접 그려요.
+/// 색과 크기는 탭바가 정해주는 값(선택됨 = 파랑, 아님 = 회색)을 그대로 따라가요.
+class _TabIcon extends StatelessWidget {
+  const _TabIcon(this.glyph);
+
+  final _TabGlyph glyph;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = IconTheme.of(context);
+    return CustomPaint(
+      size: Size.square(theme.size ?? 26),
+      painter: _TabIconPainter(glyph, theme.color ?? kAccent),
+    );
+  }
+}
+
+class _TabIconPainter extends CustomPainter {
+  _TabIconPainter(this.glyph, this.color);
+
+  final _TabGlyph glyph;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24); // 24x24 도화지에 그린 걸 늘리거나 줄여요.
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    switch (glyph) {
+      case _TabGlyph.today:
+        canvas.drawCircle(const Offset(12, 12), 9, paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(8, 12.5)
+            ..lineTo(10.7, 15.2)
+            ..lineTo(16, 9.8),
+          paint,
+        );
+      case _TabGlyph.calendar:
+        canvas.drawRRect(
+          RRect.fromLTRBR(3.5, 5, 20.5, 20.5, const Radius.circular(3)),
+          paint,
+        );
+        canvas.drawLine(const Offset(3.5, 10), const Offset(20.5, 10), paint);
+        canvas.drawLine(const Offset(8, 3), const Offset(8, 7), paint);
+        canvas.drawLine(const Offset(16, 3), const Offset(16, 7), paint);
+      case _TabGlyph.stats:
+        canvas.drawLine(const Offset(6, 20), const Offset(6, 13), paint);
+        canvas.drawLine(const Offset(12, 20), const Offset(12, 5), paint);
+        canvas.drawLine(const Offset(18, 20), const Offset(18, 9), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TabIconPainter old) =>
+      old.glyph != glyph || old.color != color;
 }
 
 // ───────────────────────── 오늘 화면 ─────────────────────────
