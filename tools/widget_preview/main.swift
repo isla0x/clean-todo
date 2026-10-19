@@ -67,7 +67,6 @@ struct Tile<V: View>: View {
                 .font(.system(size: 11))
                 .foregroundColor(acc ? Color.white.opacity(0.7) : Color.gray)
             content
-                .environment(\.widgetFamily, family)
                 .padding(acc ? 0 : 16)
                 .frame(width: size.width, height: size.height)
                 .background(acc ? Color.white.opacity(0.16) : Color.haruCard)
@@ -98,26 +97,26 @@ func save<V: View>(_ name: String, _ v: V) {
 MainActor.assumeIsolated {
     let home = VStack(alignment: .leading, spacing: 18) {
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "루틴 작게", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(sample)))
-            Tile(title: "일정 작게", family: .systemSmall, size: small, content: ScheduleWidgetView(entry: entry(sample)))
-            Tile(title: "할 일 작게", family: .systemSmall, size: small, content: TodoWidgetView(entry: entry(sample)))
+            Tile(title: "루틴 작게", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(sample), forced: .systemSmall))
+            Tile(title: "일정 작게", family: .systemSmall, size: small, content: ScheduleWidgetView(entry: entry(sample), forced: .systemSmall))
+            Tile(title: "할 일 작게", family: .systemSmall, size: small, content: TodoWidgetView(entry: entry(sample), forced: .systemSmall))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "일정 끝", family: .systemSmall, size: small, content: ScheduleWidgetView(entry: entry(allDone)))
-            Tile(title: "비어 있음(루틴)", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(empty)))
-            Tile(title: "잠김(체험 끝)", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(ended)))
+            Tile(title: "일정 끝", family: .systemSmall, size: small, content: ScheduleWidgetView(entry: entry(allDone), forced: .systemSmall))
+            Tile(title: "비어 있음(루틴)", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(empty), forced: .systemSmall))
+            Tile(title: "잠김(체험 끝)", family: .systemSmall, size: small, content: RoutineWidgetView(entry: entry(ended), forced: .systemSmall))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "루틴 중간", family: .systemMedium, size: medium, content: RoutineWidgetView(entry: entry(sample)))
-            Tile(title: "일정 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(sample)))
+            Tile(title: "루틴 중간", family: .systemMedium, size: medium, content: RoutineWidgetView(entry: entry(sample), forced: .systemMedium))
+            Tile(title: "일정 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(sample), forced: .systemMedium))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "잠김 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(ended)))
-            Tile(title: "체험 전 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(notStarted)))
+            Tile(title: "잠김 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(ended), forced: .systemMedium))
+            Tile(title: "체험 전 중간", family: .systemMedium, size: medium, content: ScheduleWidgetView(entry: entry(notStarted), forced: .systemMedium))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "일정 크게", family: .systemLarge, size: large, content: ScheduleWidgetView(entry: entry(sample)))
-            Tile(title: "캘린더 크게", family: .systemLarge, size: large, content: CalendarWidgetView(entry: entry(sample)))
+            Tile(title: "일정 크게", family: .systemLarge, size: large, content: ScheduleWidgetView(entry: entry(sample), forced: .systemLarge))
+            Tile(title: "캘린더 크게", family: .systemLarge, size: large, content: CalendarWidgetView(entry: entry(sample), forced: .systemLarge))
         }
     }
     .padding(20)
@@ -129,20 +128,20 @@ MainActor.assumeIsolated {
 
     let lock = VStack(alignment: .leading, spacing: 18) {
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "직사각형 · 일정", family: .accessoryRectangular, size: rect, content: ScheduleWidgetView(entry: entry(sample)))
-            Tile(title: "직사각형 · 루틴", family: .accessoryRectangular, size: rect, content: RoutineWidgetView(entry: entry(sample)))
+            Tile(title: "직사각형 · 일정", family: .accessoryRectangular, size: rect, content: ScheduleWidgetView(entry: entry(sample), forced: .accessoryRectangular))
+            Tile(title: "직사각형 · 루틴", family: .accessoryRectangular, size: rect, content: RoutineWidgetView(entry: entry(sample), forced: .accessoryRectangular))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "원형 · 루틴", family: .accessoryCircular, size: circle, content: RoutineWidgetView(entry: entry(sample)))
-            Tile(title: "원형 · 연속", family: .accessoryCircular, size: circle, content: StreakWidgetView(entry: entry(sample)))
-            Tile(title: "원형 · 잠김", family: .accessoryCircular, size: circle, content: StreakWidgetView(entry: entry(ended)))
+            Tile(title: "원형 · 루틴", family: .accessoryCircular, size: circle, content: RoutineWidgetView(entry: entry(sample), forced: .accessoryCircular))
+            Tile(title: "원형 · 연속", family: .accessoryCircular, size: circle, content: StreakWidgetView(entry: entry(sample), forced: .accessoryCircular))
+            Tile(title: "원형 · 잠김", family: .accessoryCircular, size: circle, content: StreakWidgetView(entry: entry(ended), forced: .accessoryCircular))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "한 줄 · 일정", family: .accessoryInline, size: inline, content: ScheduleWidgetView(entry: entry(sample)))
+            Tile(title: "한 줄 · 일정", family: .accessoryInline, size: inline, content: ScheduleWidgetView(entry: entry(sample), forced: .accessoryInline))
         }
         HStack(alignment: .top, spacing: 14) {
-            Tile(title: "한 줄 · 잠김", family: .accessoryInline, size: inline, content: ScheduleWidgetView(entry: entry(ended)))
-            Tile(title: "직사각형 · 잠김", family: .accessoryRectangular, size: rect, content: ScheduleWidgetView(entry: entry(ended)))
+            Tile(title: "한 줄 · 잠김", family: .accessoryInline, size: inline, content: ScheduleWidgetView(entry: entry(ended), forced: .accessoryInline))
+            Tile(title: "직사각형 · 잠김", family: .accessoryRectangular, size: rect, content: ScheduleWidgetView(entry: entry(ended), forced: .accessoryRectangular))
         }
     }
     .padding(20)

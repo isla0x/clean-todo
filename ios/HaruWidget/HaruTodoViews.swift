@@ -4,8 +4,11 @@ import WidgetKit
 // 다음 할 일 위젯 (홈 작게) · 캘린더와 할 일 위젯 (홈 크게)
 
 struct TodoWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var envFamily
     let entry: HaruEntry
+    /// 미리보기 그림 도구에서 위젯 크기를 정해 줄 때만 써요.
+    var forced: WidgetFamily? = nil
+    private var family: WidgetFamily { forced ?? envFamily }
 
     var body: some View {
         let s = entry.snap
@@ -68,8 +71,11 @@ let haruHolidays: Set<String> = [
 ]
 
 struct CalendarWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var envFamily
     let entry: HaruEntry
+    /// 미리보기 그림 도구에서 위젯 크기를 정해 줄 때만 써요.
+    var forced: WidgetFamily? = nil
+    private var family: WidgetFamily { forced ?? envFamily }
 
     var body: some View {
         let s = entry.snap

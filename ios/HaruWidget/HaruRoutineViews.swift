@@ -4,8 +4,11 @@ import WidgetKit
 // 오늘 루틴 위젯 (홈 작게·중간 / 잠금화면 직사각형·원형)
 
 struct RoutineWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var envFamily
     let entry: HaruEntry
+    /// 미리보기 그림 도구에서 위젯 크기를 정해 줄 때만 써요.
+    var forced: WidgetFamily? = nil
+    private var family: WidgetFamily { forced ?? envFamily }
 
     var body: some View {
         let s = entry.snap
@@ -158,8 +161,11 @@ struct RoutineCircle: View {
 // 연속 일수 위젯 (잠금화면 원형)
 
 struct StreakWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetFamily) private var envFamily
     let entry: HaruEntry
+    /// 미리보기 그림 도구에서 위젯 크기를 정해 줄 때만 써요.
+    var forced: WidgetFamily? = nil
+    private var family: WidgetFamily { forced ?? envFamily }
 
     var body: some View {
         let s = entry.snap
