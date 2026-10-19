@@ -31,6 +31,10 @@ const CupertinoDynamicColor kAccentDeep = CupertinoDynamicColor.withBrightness(
   darkColor: Color(0xFF8CBBFA),
 );
 
+/// 글자 크기를 한꺼번에 키우는 배율. 폰에서 작게 느껴지면 이 숫자만 올리면 돼요.
+/// (1.0이면 원래 크기, 1.12면 12% 크게)
+const double kTextBoost = 1.12;
+
 /// 영문·숫자는 Plus Jakarta Sans, 한글은 Pretendard(폰트를 넣었을 때) 또는
 /// iOS 기본 한글 폰트로 자동 대체돼요.
 TextStyle _font(
@@ -64,6 +68,16 @@ class TodoApp extends StatelessWidget {
           tabLabelTextStyle: _font(10, FontWeight.w500, letterSpacing: -0.1),
         ),
       ),
+      // 아이폰 설정의 글자 크기는 그대로 반영하면서 앱 전체 글자를 조금 키워요.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        final scale =
+            (mq.textScaler.scale(1.0) * kTextBoost).clamp(1.0, 1.6).toDouble();
+        return MediaQuery(
+          data: mq.copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        );
+      },
       home: const RootPage(),
     );
   }
