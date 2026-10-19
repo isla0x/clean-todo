@@ -32,8 +32,8 @@ const CupertinoDynamicColor kAccentDeep = CupertinoDynamicColor.withBrightness(
 );
 
 /// 글자 크기를 한꺼번에 키우는 배율. 폰에서 작게 느껴지면 이 숫자만 올리면 돼요.
-/// (1.0이면 원래 크기, 1.12면 12% 크게)
-const double kTextBoost = 1.12;
+/// (1.0이면 원래 크기, 1.2면 20% 크게)
+const double kTextBoost = 1.2;
 
 /// 영문·숫자는 Plus Jakarta Sans, 한글은 Pretendard(폰트를 넣었을 때) 또는
 /// iOS 기본 한글 폰트로 자동 대체돼요.
