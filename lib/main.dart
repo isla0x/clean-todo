@@ -742,7 +742,9 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
       },
       child: GestureDetector(
         onLongPress: () => _showItemMenu(item),
-        child: CupertinoListTile(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 46),
+          child: CupertinoListTile(
           onTap: () => _toggle(item),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           leadingSize: 18,
@@ -780,6 +782,7 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
           trailing: item.notify
               ? Icon(CupertinoIcons.bell_fill, size: 13, color: deep)
               : null,
+        ),
         ),
       ),
     );
@@ -904,7 +907,7 @@ class _CheckCircle extends StatelessWidget {
       CupertinoTheme.of(context).primaryColor,
       context,
     );
-    final idle = CupertinoColors.systemGrey3.resolveFrom(context);
+    final idle = CupertinoColors.systemGrey.resolveFrom(context);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -1151,7 +1154,7 @@ class _TimelineDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg =
         CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
-    final idle = CupertinoColors.systemGrey3.resolveFrom(context);
+    final idle = CupertinoColors.systemGrey.resolveFrom(context);
 
     if (state == _DotState.done) {
       return Container(
