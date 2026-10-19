@@ -1285,7 +1285,7 @@ class _ItemRow extends StatelessWidget {
             leading: _CheckCircle(checked: done),
             title: Text(
               item.title,
-              style: _font(15, FontWeight.w400, letterSpacing: -0.2).copyWith(
+              style: _font(14, FontWeight.w400, letterSpacing: -0.2).copyWith(
                 decoration: done ? TextDecoration.lineThrough : null,
                 color: done
                     ? doneColor
@@ -1305,7 +1305,7 @@ class _ItemRow extends StatelessWidget {
                         ],
                         Text(
                           parts.join(' · '),
-                          style: _font(12, FontWeight.w400)
+                          style: _font(11, FontWeight.w400)
                               .copyWith(color: doneColor),
                         ),
                       ],
@@ -1606,7 +1606,7 @@ class _TimelineRow extends StatelessWidget {
                   child: Text(
                     clockLabel(item.minutes!),
                     style: _font(
-                      12,
+                      11,
                       highlight ? FontWeight.w600 : FontWeight.w400,
                     ).copyWith(color: highlight ? deep : secondary),
                   ),
@@ -1620,7 +1620,7 @@ class _TimelineRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: _font(
-                            15,
+                            14,
                             highlight ? FontWeight.w700 : FontWeight.w400,
                             letterSpacing: -0.2,
                           ).copyWith(
