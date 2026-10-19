@@ -65,12 +65,17 @@ final class HaruNative {
             result(link)
 
         case "proStatus":
+            // 가격은 App Store에서 받아오느라 오래 걸릴 수 있어서 따로 물어봐요.
             Task { @MainActor in
                 let purchased = await Self.hasEntitlement()
                 var out: [String: Any] = ["purchased": purchased]
                 if let start = Self.trialStartMs() { out["trialStart"] = start }
-                if let price = await Self.productPrice() { out["price"] = price }
                 result(out)
+            }
+
+        case "productPrice":
+            Task { @MainActor in
+                result(await Self.productPrice())
             }
 
         case "startTrial":

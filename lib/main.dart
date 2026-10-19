@@ -632,15 +632,27 @@ class ProManager extends ChangeNotifier {
     try {
       final m = await _native.invokeMapMethod<String, dynamic>('proStatus');
       if (m == null) return;
-      purchased = m['purchased'] == true;
+      // 구입·체험 시작은 한 번 켜지면 꺼지지 않으니, 늦게 도착한 옛 응답이 덮어쓰지 못하게 해요.
+      purchased = purchased || m['purchased'] == true;
       final start = m['trialStart'];
-      trialStart =
-          start is int ? DateTime.fromMillisecondsSinceEpoch(start) : null;
-      final p = m['price'];
-      if (p is String && p.isNotEmpty) price = p;
+      if (start is int) trialStart = DateTime.fromMillisecondsSinceEpoch(start);
       notifyListeners();
+      _loadPrice();
     } catch (e) {
       debugPrint('PRO 상태 읽기 실패: $e');
+    }
+  }
+
+  /// 앱스토어에 등록된 가격을 받아와요. (상품이 없거나 느려도 화면은 기다리지 않아요)
+  Future<void> _loadPrice() async {
+    try {
+      final p = await _native.invokeMethod<String>('productPrice');
+      if (p != null && p.isNotEmpty && p != price) {
+        price = p;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('가격 읽기 실패: $e');
     }
   }
 
