@@ -61,9 +61,10 @@ class TodoApp extends StatelessWidget {
           navLargeTitleTextStyle:
               _font(28, FontWeight.w700, letterSpacing: -0.4),
           navTitleTextStyle: _font(16, FontWeight.w600),
+          tabLabelTextStyle: _font(10, FontWeight.w500, letterSpacing: -0.1),
         ),
       ),
-      home: const TodayPage(),
+      home: const RootPage(),
     );
   }
 }
@@ -81,6 +82,8 @@ class Item {
     this.time,
     this.notify = false,
     this.alert = AlertKind.at,
+    this.created,
+    this.doneOn,
   }) : doneDates = doneDates ?? <String>{};
 
   final String id;
@@ -89,6 +92,12 @@ class Item {
 
   /// 투두 완료 여부 (루틴은 사용 안 함)
   bool done;
+
+  /// 항목을 만든 날 ('yyyy-MM-dd'). 예전에 만든 항목은 비어 있어요.
+  final String? created;
+
+  /// 투두를 끝낸 날 ('yyyy-MM-dd'). 기록 화면의 "이번 달 완료"에 쓰여요.
+  String? doneOn;
 
   /// 루틴을 완료한 날짜들 ('yyyy-MM-dd')
   final Set<String> doneDates;
@@ -107,6 +116,25 @@ class Item {
   AlertKind alert;
 
   bool isDoneOn(String day) => isRoutine ? doneDates.contains(day) : done;
+
+  /// 루틴 기록이 시작된 날. 만든 날과 가장 이른 완료 날짜 중 더 이른 날이에요.
+  String? get startDay {
+    String? start = created;
+    for (final d in doneDates) {
+      if (start == null || d.compareTo(start) < 0) start = d;
+    }
+    return start;
+  }
+
+  /// 그 날의 목록·달력에 나타나는 항목인지.
+  /// 투두는 날짜가 그 날일 때, 루틴은 기록 시작일부터 오늘까지 매일이에요.
+  bool scheduledOn(String day, String today) {
+    if (!isRoutine) return date == day;
+    if (day.compareTo(today) > 0) return false;
+    if (day == today) return true;
+    final s = startDay;
+    return s != null && day.compareTo(s) >= 0;
+  }
 
   /// 자정부터 몇 분째인지 (시간이 없으면 null)
   int? get minutes {
@@ -134,6 +162,8 @@ class Item {
         'time': time,
         'notify': notify,
         'alert': alert.name,
+        'created': created,
+        'doneOn': doneOn,
       };
 
   // 예전에 저장한 데이터(date·time·notify 없음)도 그대로 읽혀요.
@@ -149,6 +179,8 @@ class Item {
         time: json['time'] as String?,
         notify: (json['notify'] as bool?) ?? false,
         alert: alertFromName(json['alert'] as String?),
+        created: json['created'] as String?,
+        doneOn: json['doneOn'] as String?,
       );
 }
 
@@ -370,80 +402,63 @@ class NewItemRequest {
   final AlertKind alert;
 }
 
-// ───────────────────────── 오늘 화면 ─────────────────────────
+// ───────────────────────── 항목 저장소 ─────────────────────────
 
-class TodayPage extends StatefulWidget {
-  const TodayPage({super.key});
-
-  @override
-  State<TodayPage> createState() => _TodayPageState();
-}
-
-class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
+/// 모든 항목과 저장을 한곳에서 맡아요. 오늘·캘린더·기록 화면이 같은 데이터를 봐요.
+class ItemStore extends ChangeNotifier {
   static const _storageKey = 'items_v1';
 
-  final List<Item> _items = [];
-  bool _loaded = false;
-  Timer? _ticker;
+  final List<Item> items = [];
+  bool loaded = false;
+  bool _disposed = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    // "2시간 40분 후" 같은 문구를 계속 맞추려고 30초마다 다시 그려요.
-    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
-    });
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  // 자정이 지나 앱으로 돌아왔을 때 "오늘" 기준으로 다시 그리기
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) setState(() {});
-  }
-
-  Future<void> _load() async {
+  Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
     if (raw != null) {
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-      _items
+      items
         ..clear()
         ..addAll(list.map(Item.fromJson));
     }
-    if (!mounted) return;
-    setState(() => _loaded = true);
+    if (_disposed) return;
+    loaded = true;
+    notifyListeners();
     // 앱을 켤 때마다 예약 목록을 현재 항목에 맞게 다시 만들어요.
-    Notifier.instance.rescheduleAll(_items);
+    Notifier.instance.rescheduleAll(items);
   }
 
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _storageKey,
-      jsonEncode(_items.map((e) => e.toJson()).toList()),
+      jsonEncode(items.map((e) => e.toJson()).toList()),
     );
   }
 
-  void _toggle(Item item) {
-    final today = dayKey(DateTime.now());
+  /// 항목 내용을 바꾼 뒤 화면을 다시 그리고 저장해요.
+  void update(VoidCallback change) {
+    change();
+    notifyListeners();
+    _save();
+  }
+
+  /// 시간이 흘렀을 때(몇 분 후 문구, 자정 넘김) 화면만 다시 그려요.
+  void touch() {
+    if (!_disposed) notifyListeners();
+  }
+
+  /// [day] 날짜의 완료 표시를 뒤집어요. (투두는 날짜와 상관없이 완료 여부 하나뿐이에요)
+  void toggle(Item item, String day) {
     HapticFeedback.selectionClick();
-    setState(() {
+    update(() {
       if (item.isRoutine) {
-        if (!item.doneDates.remove(today)) item.doneDates.add(today);
+        if (!item.doneDates.remove(day)) item.doneDates.add(day);
       } else {
         item.done = !item.done;
+        item.doneOn = item.done ? dayKey(DateTime.now()) : null;
       }
     });
-    _save();
     // 끝낸 투두는 알림을 취소하고, 다시 되돌리면 다시 예약해요.
     if (!item.isRoutine && item.notify) {
       if (item.done) {
@@ -454,176 +469,295 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
     }
   }
 
-  void _remove(Item item) {
-    setState(() => _items.remove(item));
-    _save();
+  void add(Item item) => update(() => items.add(item));
+
+  void remove(Item item) {
+    update(() => items.remove(item));
     Notifier.instance.cancel(item);
   }
 
-  /// 항목을 길게 눌렀을 때 뜨는 메뉴
-  Future<void> _showItemMenu(Item item) async {
-    HapticFeedback.mediumImpact();
-    final summary = itemSummary(item, DateTime.now());
-    final hasTime = item.minutes != null;
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
 
-    final action = await showCupertinoModalPopup<String>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text(item.title),
-        message: summary.isEmpty ? null : Text(summary),
-        actions: [
-          if (hasTime)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(ctx, 'alert'),
-              child: Text(item.notify ? '알림 시점 변경' : '알림 켜기'),
-            ),
-          if (hasTime && item.notify)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(ctx, 'off'),
-              child: const Text('알림 끄기'),
-            ),
+// ───────────────────────── 항목 메뉴·추가 ─────────────────────────
+//
+// 오늘 화면과 캘린더 화면이 똑같이 쓰는 동작들이에요.
+
+/// 항목을 길게 눌렀을 때 뜨는 메뉴
+Future<void> showItemMenu(
+  BuildContext context,
+  ItemStore store,
+  Item item,
+) async {
+  HapticFeedback.mediumImpact();
+  final summary = itemSummary(item, DateTime.now());
+  final hasTime = item.minutes != null;
+
+  final action = await showCupertinoModalPopup<String>(
+    context: context,
+    builder: (ctx) => CupertinoActionSheet(
+      title: Text(item.title),
+      message: summary.isEmpty ? null : Text(summary),
+      actions: [
+        if (hasTime)
           CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(ctx, 'delete'),
-            child: const Text('삭제'),
+            onPressed: () => Navigator.pop(ctx, 'alert'),
+            child: Text(item.notify ? '알림 시점 변경' : '알림 켜기'),
           ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
+        if (hasTime && item.notify)
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, 'off'),
+            child: const Text('알림 끄기'),
+          ),
+        CupertinoActionSheetAction(
+          isDestructiveAction: true,
+          onPressed: () => Navigator.pop(ctx, 'delete'),
+          child: const Text('삭제'),
+        ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        onPressed: () => Navigator.pop(ctx),
+        child: const Text('취소'),
+      ),
+    ),
+  );
+  if (!context.mounted || action == null) return;
+
+  switch (action) {
+    case 'alert':
+      await changeItemAlert(context, store, item);
+    case 'off':
+      store.update(() => item.notify = false);
+      Notifier.instance.cancel(item);
+    case 'delete':
+      store.remove(item);
+  }
+}
+
+/// 이미 만든 항목의 알림 시점 바꾸기 (처음 켤 때도 같은 시트)
+Future<void> changeItemAlert(
+  BuildContext context,
+  ItemStore store,
+  Item item,
+) async {
+  final minutes = item.minutes;
+  if (minutes == null) return;
+  final now = DateTime.now();
+
+  final picked = await showAlertSheet(
+    context,
+    routine: item.isRoutine,
+    minutes: minutes,
+    due: item.dueAt,
+    selected: item.notify ? item.alert : null,
+    message: '${itemSummary(item, now, withAlert: false)} · ${item.title}',
+    now: now,
+  );
+  if (picked == null || !context.mounted) return;
+
+  final granted = await Notifier.instance.ensurePermission();
+  if (!context.mounted) return;
+  if (!granted) {
+    showPermissionHelp(context);
+    return;
+  }
+
+  store.update(() {
+    item.alert = picked;
+    item.notify = true;
+  });
+  Notifier.instance.schedule(item);
+}
+
+void showPermissionHelp(BuildContext context) {
+  showCupertinoDialog<void>(
+    context: context,
+    builder: (ctx) => CupertinoAlertDialog(
+      title: const Text('알림이 꺼져 있어요'),
+      content: const Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Text('설정 > 알림에서 이 앱의 알림을 허용하면 받을 수 있어요.'),
+      ),
+      actions: [
+        CupertinoDialogAction(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('취소'),
+          child: const Text('확인'),
         ),
-      ),
-    );
-    if (!mounted || action == null) return;
+      ],
+    ),
+  );
+}
 
-    switch (action) {
-      case 'alert':
-        await _changeAlert(item);
-      case 'off':
-        setState(() => item.notify = false);
-        _save();
-        Notifier.instance.cancel(item);
-      case 'delete':
-        _remove(item);
-    }
+/// 아래 입력창에서 넘어온 새 항목 저장
+Future<void> addItemFromInput(
+  BuildContext context,
+  ItemStore store,
+  NewItemRequest req,
+) async {
+  final now = DateTime.now();
+  final p = req.parsed;
+
+  String? date;
+  if (!req.isRoutine) {
+    // 시간만 적었으면 오늘, 날짜도 시간도 없으면 날짜 없는 투두
+    final d =
+        p.date ?? (p.hasTime ? DateTime(now.year, now.month, now.day) : null);
+    date = d == null ? null : dayKey(d);
   }
+  final time = p.hasTime ? hhmm(p.minutes!) : null;
 
-  /// 이미 만든 항목의 알림 시점 바꾸기 (처음 켤 때도 같은 시트)
-  Future<void> _changeAlert(Item item) async {
-    final minutes = item.minutes;
-    if (minutes == null) return;
-    final now = DateTime.now();
-
-    final picked = await showAlertSheet(
-      context,
-      routine: item.isRoutine,
-      minutes: minutes,
-      due: item.dueAt,
-      selected: item.notify ? item.alert : null,
-      message: '${itemSummary(item, now, withAlert: false)} · ${item.title}',
-      now: now,
-    );
-    if (picked == null || !mounted) return;
-
+  // 알림을 켠 항목이면 먼저 권한을 확인해요. (처음 한 번만 iOS가 허용 여부를 물어봐요)
+  var notify = req.notify && time != null;
+  var denied = false;
+  if (notify) {
     final granted = await Notifier.instance.ensurePermission();
-    if (!mounted) return;
     if (!granted) {
-      _showPermissionHelp();
-      return;
+      notify = false;
+      denied = true;
     }
+  }
+  if (!context.mounted) return;
 
-    setState(() {
-      item.alert = picked;
-      item.notify = true;
+  final item = Item(
+    id: now.microsecondsSinceEpoch.toString(),
+    title: p.title,
+    isRoutine: req.isRoutine,
+    date: date,
+    time: time,
+    notify: notify,
+    alert: req.alert,
+    created: dayKey(now),
+  );
+  store.add(item);
+  if (notify) Notifier.instance.schedule(item);
+  if (denied) showPermissionHelp(context);
+}
+
+// ───────────────────────── 앱 뼈대 (하단 탭) ─────────────────────────
+
+class RootPage extends StatefulWidget {
+  const RootPage({super.key});
+
+  @override
+  State<RootPage> createState() => _RootPageState();
+}
+
+class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
+  final ItemStore _store = ItemStore();
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // "2시간 40분 후" 같은 문구를 계속 맞추려고 30초마다 다시 그려요.
+    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _store.touch();
     });
-    _save();
-    Notifier.instance.schedule(item);
+    _store.load();
   }
 
-  void _showPermissionHelp() {
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('알림이 꺼져 있어요'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Text('설정 > 알림에서 이 앱의 알림을 허용하면 받을 수 있어요.'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('확인'),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _store.dispose();
+    super.dispose();
   }
 
-  /// 아래 입력창에서 넘어온 새 항목 저장
-  Future<void> _addItem(NewItemRequest req) async {
-    final now = DateTime.now();
-    final p = req.parsed;
-
-    String? date;
-    if (!req.isRoutine) {
-      // 시간만 적었으면 오늘, 날짜도 시간도 없으면 날짜 없는 투두
-      final d = p.date ??
-          (p.hasTime ? DateTime(now.year, now.month, now.day) : null);
-      date = d == null ? null : dayKey(d);
-    }
-    final time = p.hasTime ? hhmm(p.minutes!) : null;
-
-    // 알림을 켠 항목이면 먼저 권한을 확인해요. (처음 한 번만 iOS가 허용 여부를 물어봐요)
-    var notify = req.notify && time != null;
-    var denied = false;
-    if (notify) {
-      final granted = await Notifier.instance.ensurePermission();
-      if (!granted) {
-        notify = false;
-        denied = true;
-      }
-    }
-    if (!mounted) return;
-
-    final item = Item(
-      id: now.microsecondsSinceEpoch.toString(),
-      title: p.title,
-      isRoutine: req.isRoutine,
-      date: date,
-      time: time,
-      notify: notify,
-      alert: req.alert,
-    );
-    setState(() => _items.add(item));
-    _save();
-    if (notify) Notifier.instance.schedule(item);
-    if (denied) _showPermissionHelp();
+  // 자정이 지나 앱으로 돌아왔을 때 "오늘" 기준으로 다시 그리기
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _store.touch();
   }
 
   @override
   Widget build(BuildContext context) {
+    return CupertinoTabScaffold(
+      tabBar: CupertinoTabBar(
+        // 투명하면 아래 입력창이 가려질 수 있어서 불투명한 배경을 써요.
+        backgroundColor: const CupertinoDynamicColor.withBrightness(
+          color: Color(0xFFF9F9F9),
+          darkColor: Color(0xFF1D1D1D),
+        ),
+        activeColor: kAccent,
+        inactiveColor: CupertinoColors.secondaryLabel,
+        iconSize: 26,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.checkmark_circle),
+            label: '오늘',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.calendar),
+            label: '캘린더',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chart_bar),
+            label: '기록',
+          ),
+        ],
+      ),
+      tabBuilder: (context, index) {
+        return CupertinoTabView(
+          builder: (_) => switch (index) {
+            0 => TodayPage(store: _store),
+            1 => CalendarPage(store: _store),
+            _ => StatsPage(store: _store),
+          },
+        );
+      },
+    );
+  }
+}
+
+// ───────────────────────── 오늘 화면 ─────────────────────────
+
+class TodayPage extends StatelessWidget {
+  const TodayPage({super.key, required this.store});
+
+  final ItemStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: ListenableBuilder(
+        listenable: store,
+        builder: _buildBody,
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, Widget? _) {
+    final items = store.items;
     final now = DateTime.now();
     final today = dayKey(now);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    final routines = _items.where((e) => e.isRoutine).toList();
+    final routines = items.where((e) => e.isRoutine).toList();
 
     // 오늘 시간이 정해진 투두 → 타임라인 카드
-    final timed = _items
+    final timed = items
         .where((e) => !e.isRoutine && e.date == today && e.time != null)
         .toList()
       ..sort((a, b) => a.minutes!.compareTo(b.minutes!));
 
     // 앞으로 예정된 투두
-    final upcoming = _items
-        .where((e) => !e.isRoutine && e.date != null && e.date!.compareTo(today) > 0)
+    final upcoming = items
+        .where((e) =>
+            !e.isRoutine && e.date != null && e.date!.compareTo(today) > 0)
         .toList()
       ..sort((a, b) => '${a.date} ${a.time ?? '00:00'}'
           .compareTo('${b.date} ${b.time ?? '00:00'}'));
 
     // 그 외 투두: 날짜 없음 + 오늘(시간 없음) + 못 끝낸 지난 날짜
     // (지난 날짜인데 이미 끝낸 것은 오늘 화면에서 빠져요)
-    final todos = _items
+    final todos = items
         .where((e) =>
             !e.isRoutine &&
             !(e.date == today && e.time != null) &&
@@ -635,156 +769,83 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
     final routineDone = routines.where((e) => e.isDoneOn(today)).length;
     final todoDone = todos.where((e) => e.isDoneOn(today)).length;
 
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: Column(
-        children: [
-          Expanded(
-            child: CustomScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('오늘'),
-                  backgroundColor: CupertinoColors.systemGroupedBackground,
-                ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
-                        child: Text(
-                          '${now.month}월 ${now.day}일 ${kWeekdays[now.weekday - 1]}요일',
-                          style: TextStyle(fontSize: 12, color: secondary),
+    return Column(
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              CupertinoSliverNavigationBar(
+                largeTitle: const Text('오늘'),
+                backgroundColor: CupertinoColors.systemGroupedBackground,
+              ),
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
+                      child: Text(
+                        '${now.month}월 ${now.day}일 ${kWeekdays[now.weekday - 1]}요일',
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      ),
+                    ),
+                    if (!store.loaded)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 80),
+                        child: Center(child: CupertinoActivityIndicator()),
+                      )
+                    else if (items.isEmpty)
+                      _buildEmpty(context)
+                    else ...[
+                      if (timed.isNotEmpty)
+                        _TimelineCard(
+                          timed: timed,
+                          now: now,
+                          onToggle: (item) => store.toggle(item, today),
+                          onMenu: (item) => showItemMenu(context, store, item),
                         ),
-                      ),
-                      if (!_loaded)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 80),
-                          child: Center(child: CupertinoActivityIndicator()),
-                        )
-                      else if (_items.isEmpty)
-                        _buildEmpty(context)
-                      else ...[
-                        if (timed.isNotEmpty)
-                          _TimelineCard(
-                            timed: timed,
-                            now: now,
-                            onToggle: _toggle,
-                            onMenu: _showItemMenu,
-                          ),
-                        if (routines.isNotEmpty)
-                          _Section(
-                            header: '루틴 · $routineDone/${routines.length}',
-                            children: [
-                              for (final item in routines) _buildRow(item, now),
-                            ],
-                          ),
-                        if (todos.isNotEmpty)
-                          _Section(
-                            header: '투두 · $todoDone/${todos.length}',
-                            children: [
-                              for (final item in todos) _buildRow(item, now),
-                            ],
-                          ),
-                        if (upcoming.isNotEmpty)
-                          _Section(
-                            header: '예정 · ${upcoming.length}',
-                            children: [
-                              for (final item in upcoming) _buildRow(item, now),
-                            ],
-                          ),
-                      ],
-                      const SizedBox(height: 24),
+                      if (routines.isNotEmpty)
+                        _Section(
+                          header: '루틴 · $routineDone/${routines.length}',
+                          children: [
+                            for (final item in routines)
+                              _ItemRow(store: store, item: item, now: now),
+                          ],
+                        ),
+                      if (todos.isNotEmpty)
+                        _Section(
+                          header: '투두 · $todoDone/${todos.length}',
+                          children: [
+                            for (final item in todos)
+                              _ItemRow(store: store, item: item, now: now),
+                          ],
+                        ),
+                      if (upcoming.isNotEmpty)
+                        _Section(
+                          header: '예정 · ${upcoming.length}',
+                          children: [
+                            for (final item in upcoming)
+                              _ItemRow(store: store, item: item, now: now),
+                          ],
+                        ),
                     ],
-                  ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          _InputBar(onSubmit: _addItem),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRow(Item item, DateTime now) {
-    final today = dayKey(now);
-    final done = item.isDoneOn(today);
-    final streak = item.isRoutine ? streakOf(item, now) : 0;
-    final doneColor = CupertinoColors.secondaryLabel.resolveFrom(context);
-    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
-
-    // 보조 문구: 루틴은 "오후 9:00 · 3일 연속",
-    // 다른 날짜 투두는 "9월 18일 (금) · 오후 2:00"
-    final parts = <String>[];
-    if (item.isRoutine) {
-      if (item.minutes != null) parts.add(clockLabel(item.minutes!));
-      if (streak > 0) parts.add('$streak일 연속');
-    } else {
-      final d = parseDayKey(item.date);
-      if (d != null && item.date != today) parts.add(dateLabel(d, now));
-      if (item.minutes != null) parts.add(clockLabel(item.minutes!));
-    }
-
-    return Dismissible(
-      key: ValueKey(item.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: CupertinoColors.systemRed,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 22),
-        child: const Icon(CupertinoIcons.delete, color: CupertinoColors.white),
-      ),
-      onDismissed: (_) {
-        HapticFeedback.mediumImpact();
-        _remove(item);
-      },
-      child: GestureDetector(
-        onLongPress: () => _showItemMenu(item),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 46),
-          child: CupertinoListTile(
-          onTap: () => _toggle(item),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          leadingSize: 18,
-          leadingToTitle: 14,
-          leading: _CheckCircle(checked: done),
-          title: Text(
-            item.title,
-            style: _font(15, FontWeight.w400, letterSpacing: -0.2).copyWith(
-              decoration: done ? TextDecoration.lineThrough : null,
-              color: done
-                  ? doneColor
-                  : CupertinoColors.label.resolveFrom(context),
-            ),
+        ),
+        // 아래 탭바가 이미 화면 아래 여백을 차지하고 있어서 입력창은 여백을 또 넣지 않아요.
+        MediaQuery.removePadding(
+          context: context,
+          removeBottom: true,
+          child: _InputBar(
+            onSubmit: (req) => addItemFromInput(context, store, req),
           ),
-          // 보조 문구(연속 일수, 날짜·시간)는 모두 오른쪽에 12px로 붙여요.
-          additionalInfo: parts.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (streak >= kFlameStreak) ...[
-                        const _FlameIcon(size: 14),
-                        const SizedBox(width: 3),
-                      ],
-                      Text(
-                        parts.join(' · '),
-                        style: _font(12, FontWeight.w400)
-                            .copyWith(color: doneColor),
-                      ),
-                    ],
-                  ),
-                )
-              : null,
-          trailing: item.notify
-              ? Icon(CupertinoIcons.bell_fill, size: 13, color: deep)
-              : null,
         ),
-        ),
-      ),
+      ],
     );
   }
 
@@ -812,6 +873,114 @@ class _TodayPageState extends State<TodayPage> with WidgetsBindingObserver {
               style: TextStyle(fontSize: 12, color: secondary),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────── 목록 한 줄 ─────────────────────────
+
+/// 오늘 화면과 캘린더 화면의 목록에 쓰는 한 줄.
+/// 탭하면 완료, 길게 누르면 메뉴, 왼쪽으로 밀면 삭제예요.
+class _ItemRow extends StatelessWidget {
+  const _ItemRow({
+    required this.store,
+    required this.item,
+    required this.now,
+    this.day,
+    this.inCalendar = false,
+  });
+
+  final ItemStore store;
+  final Item item;
+  final DateTime now;
+
+  /// 보고 있는 날짜 ('yyyy-MM-dd'). 비우면 오늘이에요.
+  final String? day;
+
+  /// 캘린더 목록에서는 날짜·연속 일수 없이 시간만 보여줘요.
+  final bool inCalendar;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = dayKey(now);
+    final shown = day ?? today;
+    final done = item.isDoneOn(shown);
+    final streak = (item.isRoutine && !inCalendar) ? streakOf(item, now) : 0;
+    final doneColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+
+    // 보조 문구: 루틴은 "오후 9:00 · 3일 연속",
+    // 다른 날짜 투두는 "9월 18일 (금) · 오후 2:00"
+    final parts = <String>[];
+    if (item.isRoutine) {
+      if (item.minutes != null) parts.add(clockLabel(item.minutes!));
+      if (streak > 0) parts.add('$streak일 연속');
+    } else {
+      final d = parseDayKey(item.date);
+      if (!inCalendar && d != null && item.date != today) {
+        parts.add(dateLabel(d, now));
+      }
+      if (item.minutes != null) parts.add(clockLabel(item.minutes!));
+    }
+
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: CupertinoColors.systemRed,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 22),
+        child: const Icon(CupertinoIcons.delete, color: CupertinoColors.white),
+      ),
+      onDismissed: (_) {
+        HapticFeedback.mediumImpact();
+        store.remove(item);
+      },
+      child: GestureDetector(
+        onLongPress: () => showItemMenu(context, store, item),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 46),
+          child: CupertinoListTile(
+            onTap: () => store.toggle(item, shown),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leadingSize: 18,
+            leadingToTitle: 14,
+            leading: _CheckCircle(checked: done),
+            title: Text(
+              item.title,
+              style: _font(15, FontWeight.w400, letterSpacing: -0.2).copyWith(
+                decoration: done ? TextDecoration.lineThrough : null,
+                color: done
+                    ? doneColor
+                    : CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            // 보조 문구(연속 일수, 날짜·시간)는 모두 오른쪽에 12px로 붙여요.
+            additionalInfo: parts.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (streak >= kFlameStreak) ...[
+                          const _FlameIcon(size: 14),
+                          const SizedBox(width: 3),
+                        ],
+                        Text(
+                          parts.join(' · '),
+                          style: _font(12, FontWeight.w400)
+                              .copyWith(color: doneColor),
+                        ),
+                      ],
+                    ),
+                  )
+                : null,
+            trailing: item.notify
+                ? Icon(CupertinoIcons.bell_fill, size: 13, color: deep)
+                : null,
+          ),
         ),
       ),
     );
@@ -2056,10 +2225,17 @@ const List<BoxShadow> kCardShadow = [
 /// 제목 + 둥근 흰 카드 안에 줄이 쌓인 목록 묶음.
 /// (CupertinoListSection은 그림자가 카드 밖에서 잘려서 직접 만들었어요.)
 class _Section extends StatelessWidget {
-  const _Section({required this.header, required this.children});
+  const _Section({
+    required this.header,
+    required this.children,
+    this.indent = 48,
+  });
 
   final String header;
   final List<Widget> children;
+
+  /// 줄 사이 구분선이 시작하는 위치 (기본은 체크 동그라미 오른쪽)
+  final double indent;
 
   @override
   Widget build(BuildContext context) {
@@ -2073,7 +2249,7 @@ class _Section extends StatelessWidget {
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
         rows.add(Container(
-          margin: const EdgeInsetsDirectional.only(start: 48),
+          margin: EdgeInsetsDirectional.only(start: indent),
           height: 0.5,
           color: line,
         ));
@@ -2109,6 +2285,853 @@ class _Section extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 카드 모양(배경·둥근 모서리·그림자). 오늘·캘린더·기록 화면이 모두 같은 모양을 써요.
+BoxDecoration _cardDecoration(BuildContext context) {
+  return BoxDecoration(
+    color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+    borderRadius: BorderRadius.circular(kCardRadius),
+    boxShadow: kCardShadow,
+  );
+}
+
+// ───────────────────────── 날짜별 집계 ─────────────────────────
+
+/// [day]에 나타나는 항목: 루틴(기록 시작일~오늘) → 시간 있는 투두(시간순) → 시간 없는 투두
+List<Item> itemsOnDay(List<Item> items, String day, String today) {
+  final routines =
+      items.where((e) => e.isRoutine && e.scheduledOn(day, today)).toList();
+  final todos = items.where((e) => !e.isRoutine && e.date == day).toList()
+    ..sort((a, b) {
+      final am = a.minutes;
+      final bm = b.minutes;
+      if (am == null && bm == null) return 0;
+      if (am == null) return 1;
+      if (bm == null) return -1;
+      return am.compareTo(bm);
+    });
+  return [...routines, ...todos];
+}
+
+/// [day]에 해야 하는 항목 수와 끝낸 항목 수
+({int total, int done}) dayProgress(
+  List<Item> items,
+  String day,
+  String today,
+) {
+  var total = 0;
+  var done = 0;
+  for (final e in items) {
+    if (!e.scheduledOn(day, today)) continue;
+    total++;
+    if (e.isDoneOn(day)) done++;
+  }
+  return (total: total, done: done);
+}
+
+/// 루틴을 가장 길게 이어서 한 일수 (지금 이어지는 중이 아니어도 돼요)
+int longestRunOf(Item item) {
+  final days = item.doneDates.map(parseDayKey).whereType<DateTime>().toList()
+    ..sort();
+  var best = 0;
+  var run = 0;
+  DateTime? prev;
+  for (final d in days) {
+    if (prev != null &&
+        DateTime.utc(d.year, d.month, d.day)
+                .difference(DateTime.utc(prev.year, prev.month, prev.day))
+                .inDays ==
+            1) {
+      run++;
+    } else {
+      run = 1;
+    }
+    if (run > best) best = run;
+    prev = d;
+  }
+  return best;
+}
+
+// ───────────────────────── 캘린더 화면 ─────────────────────────
+
+/// 달력에서 빨갛게 보이는 공휴일(2026~2027). 해가 바뀌면 다음 해 날짜를 여기에 더하면 돼요.
+const Set<String> kHolidays = {
+  // 2026
+  '2026-01-01',
+  '2026-02-16', '2026-02-17', '2026-02-18', // 설날 연휴
+  '2026-03-01', '2026-03-02', // 삼일절, 대체공휴일
+  '2026-05-01', // 노동절
+  '2026-05-05', // 어린이날
+  '2026-05-24', '2026-05-25', // 부처님오신날, 대체공휴일
+  '2026-06-03', // 지방선거
+  '2026-06-06', // 현충일
+  '2026-07-17', // 제헌절
+  '2026-08-15', '2026-08-17', // 광복절, 대체공휴일
+  '2026-09-24', '2026-09-25', '2026-09-26', // 추석 연휴
+  '2026-10-03', '2026-10-05', // 개천절, 대체공휴일
+  '2026-10-09', // 한글날
+  '2026-12-25',
+  // 2027
+  '2027-01-01',
+  '2027-02-06', '2027-02-07', '2027-02-08', '2027-02-09', // 설날 연휴, 대체공휴일
+  '2027-03-01',
+  '2027-05-01', '2027-05-03', // 노동절, 대체공휴일
+  '2027-05-05',
+  '2027-05-13', // 부처님오신날
+  '2027-06-06',
+  '2027-07-17', '2027-07-19', // 제헌절, 대체공휴일
+  '2027-08-15', '2027-08-16', // 광복절, 대체공휴일
+  '2027-09-14', '2027-09-15', '2027-09-16', // 추석 연휴
+  '2027-10-03', '2027-10-04', // 개천절, 대체공휴일
+  '2027-10-09', '2027-10-11', // 한글날, 대체공휴일
+  '2027-12-25', '2027-12-27', // 성탄절, 대체공휴일
+};
+
+/// 일요일·공휴일 글자색
+const CupertinoDynamicColor kHolidayRed = CupertinoDynamicColor.withBrightness(
+  color: Color(0xFFD70015),
+  darkColor: Color(0xFFFF6961),
+);
+
+bool _isRedDay(DateTime d) =>
+    d.weekday == DateTime.sunday || kHolidays.contains(dayKey(d));
+
+enum _DayStatus { none, partial, all }
+
+class CalendarPage extends StatefulWidget {
+  const CalendarPage({super.key, required this.store});
+
+  final ItemStore store;
+
+  @override
+  State<CalendarPage> createState() => _CalendarPageState();
+}
+
+class _CalendarPageState extends State<CalendarPage> {
+  late DateTime _month; // 보고 있는 달의 1일
+  late DateTime _selected; // 눌러서 고른 날
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _month = DateTime(now.year, now.month);
+    _selected = DateTime(now.year, now.month, now.day);
+  }
+
+  void _moveMonth(int delta) {
+    final now = DateTime.now();
+    final m = DateTime(_month.year, _month.month + delta);
+    HapticFeedback.selectionClick();
+    setState(() {
+      _month = m;
+      // 이번 달이면 오늘, 다른 달이면 그 달 1일을 골라 둬요.
+      _selected = (m.year == now.year && m.month == now.month)
+          ? DateTime(now.year, now.month, now.day)
+          : m;
+    });
+  }
+
+  void _select(DateTime d) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _selected = d;
+      _month = DateTime(d.year, d.month);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: ListenableBuilder(
+        listenable: widget.store,
+        builder: _buildBody,
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, Widget? _) {
+    final items = widget.store.items;
+    final now = DateTime.now();
+    final today = dayKey(now);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+
+    // 일요일부터 시작하는 달력 칸
+    final first = DateTime(_month.year, _month.month);
+    final lead = first.weekday % 7; // 일=0, 월=1 … 토=6
+    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
+    final weeks = ((lead + daysInMonth) / 7).ceil();
+
+    _DayStatus statusOf(DateTime d) {
+      final p = dayProgress(items, dayKey(d), today);
+      if (p.total == 0) return _DayStatus.none;
+      return p.done == p.total ? _DayStatus.all : _DayStatus.partial;
+    }
+
+    final selectedKey = dayKey(_selected);
+    final dayItems = itemsOnDay(items, selectedKey, today);
+    final header =
+        '${_selected.month}월 ${_selected.day}일 ${kWeekdays[_selected.weekday - 1]}요일';
+
+    return CustomScrollView(
+      slivers: [
+        CupertinoSliverNavigationBar(
+          largeTitle: const Text('캘린더'),
+          backgroundColor: CupertinoColors.systemGroupedBackground,
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 2026년 10월  < >
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_month.year}년 ${_month.month}월',
+                        style: _font(17, FontWeight.w600, letterSpacing: -0.3)
+                            .copyWith(color: label),
+                      ),
+                    ),
+                    _MonthArrow(
+                      icon: CupertinoIcons.chevron_left,
+                      semanticLabel: '이전 달',
+                      onTap: () => _moveMonth(-1),
+                    ),
+                    _MonthArrow(
+                      icon: CupertinoIcons.chevron_right,
+                      semanticLabel: '다음 달',
+                      onTap: () => _moveMonth(1),
+                    ),
+                  ],
+                ),
+              ),
+              // 달력 카드 (좌우로 밀어서 달 넘기기)
+              GestureDetector(
+                onHorizontalDragEnd: (d) {
+                  final v = d.primaryVelocity ?? 0;
+                  if (v < -300) {
+                    _moveMonth(1);
+                  } else if (v > 300) {
+                    _moveMonth(-1);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                  decoration: _cardDecoration(context),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 22,
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < 7; i++)
+                              Expanded(
+                                child: Center(
+                                  child: Text(
+                                    const ['일', '월', '화', '수', '목', '금', '토'][i],
+                                    style: _font(11, FontWeight.w600).copyWith(
+                                      color: i == 0
+                                          ? CupertinoDynamicColor.resolve(
+                                              kHolidayRed, context)
+                                          : secondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      for (var w = 0; w < weeks; w++)
+                        Row(
+                          children: [
+                            for (var c = 0; c < 7; c++)
+                              Builder(builder: (context) {
+                                final date = DateTime(
+                                  _month.year,
+                                  _month.month,
+                                  1 - lead + w * 7 + c,
+                                );
+                                final inMonth = date.month == _month.month;
+                                final key = dayKey(date);
+                                return _DayCell(
+                                  date: date,
+                                  inMonth: inMonth,
+                                  isToday: key == today,
+                                  isSelected: key == selectedKey,
+                                  status:
+                                      inMonth ? statusOf(date) : _DayStatus.none,
+                                  onTap: () => _select(date),
+                                );
+                              }),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              // 고른 날의 목록
+              if (dayItems.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 7),
+                        child: Text(
+                          header,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 16 / 12,
+                            color: secondary,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            '이 날은 일정이 없어요',
+                            style: TextStyle(fontSize: 12, color: secondary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _Section(
+                  header: header,
+                  children: [
+                    for (final item in dayItems)
+                      _ItemRow(
+                        store: widget.store,
+                        item: item,
+                        now: now,
+                        day: selectedKey,
+                        inCalendar: true,
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MonthArrow extends StatelessWidget {
+  const _MonthArrow({
+    required this.icon,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(icon, size: 20, color: kAccent),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayCell extends StatelessWidget {
+  const _DayCell({
+    required this.date,
+    required this.inMonth,
+    required this.isToday,
+    required this.isSelected,
+    required this.status,
+    required this.onTap,
+  });
+
+  final DateTime date;
+  final bool inMonth;
+  final bool isToday;
+  final bool isSelected;
+  final _DayStatus status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var numberColor = !inMonth
+        ? CupertinoColors.secondaryLabel.resolveFrom(context)
+        : _isRedDay(date)
+            ? CupertinoDynamicColor.resolve(kHolidayRed, context)
+            : CupertinoColors.label.resolveFrom(context);
+    var weight = FontWeight.w400;
+    Color? circle;
+    if (isToday) {
+      circle = kAccent;
+      numberColor = CupertinoColors.white;
+      weight = FontWeight.w600;
+    } else if (isSelected) {
+      circle = CupertinoDynamicColor.resolve(kAccentSoft, context);
+      numberColor = CupertinoDynamicColor.resolve(kAccentDeep, context);
+      weight = FontWeight.w600;
+    }
+
+    final dot = switch (status) {
+      _DayStatus.none => const SizedBox(width: 6, height: 6),
+      _DayStatus.all => Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: kAccent,
+          ),
+        ),
+      _DayStatus.partial => Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: kAccent, width: 1.4),
+          ),
+        ),
+    };
+
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: '${date.month}월 ${date.day}일',
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(
+            height: 46,
+            child: Column(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: circle),
+                  child: Text(
+                    '${date.day}',
+                    style: _font(15, weight).copyWith(color: numberColor),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                dot,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────── 기록 화면 ─────────────────────────
+
+class StatsPage extends StatelessWidget {
+  const StatsPage({super.key, required this.store});
+
+  final ItemStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: ListenableBuilder(
+        listenable: store,
+        builder: _buildBody,
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, Widget? _) {
+    final items = store.items;
+    final now = DateTime.now();
+    final today = dayKey(now);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+
+    // 이번 주: 월요일 ~ 일요일
+    final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+    final week = [
+      for (var i = 0; i < 7; i++)
+        DateTime(monday.year, monday.month, monday.day + i),
+    ];
+    final sunday = week.last;
+    final weekText = monday.month == sunday.month
+        ? '이번 주 · ${monday.month}월 ${monday.day}일 – ${sunday.day}일'
+        : '이번 주 · ${monday.month}월 ${monday.day}일 – ${sunday.month}월 ${sunday.day}일';
+
+    // 요일별 달성률 (아직 안 온 날, 할 일이 없던 날은 비워 둬요)
+    final rates = <double?>[];
+    for (final d in week) {
+      final key = dayKey(d);
+      if (key.compareTo(today) > 0) {
+        rates.add(null);
+        continue;
+      }
+      final p = dayProgress(items, key, today);
+      rates.add(p.total == 0 ? null : p.done / p.total);
+    }
+    final known = rates.whereType<double>().toList();
+    final average =
+        known.isEmpty ? null : known.reduce((a, b) => a + b) / known.length;
+    final todayIndex = now.weekday - 1;
+
+    // 이번 달에 끝낸 개수
+    final monthPrefix =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-';
+    var monthDone = 0;
+    for (final e in items) {
+      if (e.isRoutine) {
+        monthDone += e.doneDates.where((d) => d.startsWith(monthPrefix)).length;
+      } else if (e.done) {
+        final key = e.doneOn ?? e.date;
+        if (key != null && key.startsWith(monthPrefix)) monthDone++;
+      }
+    }
+
+    // 가장 길게 이어간 루틴
+    final routines = items.where((e) => e.isRoutine).toList();
+    var longest = 0;
+    for (final e in routines) {
+      final run = longestRunOf(e);
+      if (run > longest) longest = run;
+    }
+
+    // 지금 이어지는 연속 일수가 긴 순서
+    final streaks = {for (final e in routines) e: streakOf(e, now)};
+    routines.sort((a, b) {
+      final c = streaks[b]!.compareTo(streaks[a]!);
+      return c != 0 ? c : a.title.compareTo(b.title);
+    });
+
+    final barText = [
+      for (var i = 0; i < 7; i++)
+        '${kWeekdays[i]} ${rates[i] == null ? '기록 없음' : '${(rates[i]! * 100).round()}%'}',
+    ].join(', ');
+
+    return CustomScrollView(
+      slivers: [
+        CupertinoSliverNavigationBar(
+          largeTitle: const Text('기록'),
+          backgroundColor: CupertinoColors.systemGroupedBackground,
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+                child: Text(
+                  weekText,
+                  style: TextStyle(fontSize: 12, color: secondary),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        label: '최장 연속',
+                        value: '$longest',
+                        unit: '일',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        label: '이번 달 완료',
+                        value: '$monthDone',
+                        unit: '개',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 평균 달성률 + 요일별 막대
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.all(16),
+                decoration: _cardDecoration(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          average == null ? '–' : '${(average * 100).round()}%',
+                          style: _font(22, FontWeight.w700, letterSpacing: -0.3)
+                              .copyWith(color: label, height: 28 / 22),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '평균 달성률',
+                          style: _font(12, FontWeight.w400)
+                              .copyWith(color: secondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Semantics(
+                      label: '요일별 달성률: $barText',
+                      excludeSemantics: true,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < 7; i++) ...[
+                            if (i > 0) const SizedBox(width: 10),
+                            Expanded(
+                              child: _WeekBar(
+                                label: kWeekdays[i],
+                                rate: rates[i],
+                                isToday: i == todayIndex,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (routines.isNotEmpty)
+                _Section(
+                  header: '연속 달성',
+                  indent: 16,
+                  children: [
+                    for (final e in routines)
+                      _StreakRow(
+                        item: e,
+                        streak: streaks[e]!,
+                        week: week,
+                        today: today,
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: _cardDecoration(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: _font(12, FontWeight.w400)
+                .copyWith(color: secondary, height: 16 / 12),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: _font(22, FontWeight.w700, letterSpacing: -0.3).copyWith(
+                  color: CupertinoColors.label.resolveFrom(context),
+                  height: 28 / 22,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: _font(15, FontWeight.w400).copyWith(color: secondary),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekBar extends StatelessWidget {
+  const _WeekBar({
+    required this.label,
+    required this.rate,
+    required this.isToday,
+  });
+
+  final String label;
+  final double? rate;
+  final bool isToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final track = CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            height: 100,
+            color: track,
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              widthFactor: 1,
+              heightFactor: (rate ?? 0).clamp(0.0, 1.0),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: kAccent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: _font(12, isToday ? FontWeight.w600 : FontWeight.w400).copyWith(
+            color: isToday ? labelColor : secondary,
+            height: 16 / 12,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StreakRow extends StatelessWidget {
+  const _StreakRow({
+    required this.item,
+    required this.streak,
+    required this.week,
+    required this.today,
+  });
+
+  final Item item;
+  final int streak;
+  final List<DateTime> week;
+  final String today;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final missed = CupertinoColors.systemGrey.resolveFrom(context);
+    final idle = CupertinoColors.systemGrey4.resolveFrom(context);
+
+    var doneCount = 0;
+    final dots = <Widget>[];
+    for (var i = 0; i < week.length; i++) {
+      final key = dayKey(week[i]);
+      final done = item.doneDates.contains(key);
+      if (done) doneCount++;
+      // 끝냄 = 파란 채움, 놓침 = 진한 회색 테두리, 아직 안 온 날·기록 전 날 = 연한 테두리
+      final scheduled = key.compareTo(today) <= 0 && item.scheduledOn(key, today);
+      dots.add(
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done ? kAccent : null,
+            border: done
+                ? null
+                : Border.all(color: scheduled ? missed : idle, width: 1.5),
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: '${item.title}, 이번 주 7일 중 $doneCount일 완료',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.title,
+                    style: _font(15, FontWeight.w400, letterSpacing: -0.2)
+                        .copyWith(
+                      color: CupertinoColors.label.resolveFrom(context),
+                      height: 20 / 15,
+                    ),
+                  ),
+                ),
+                if (streak >= kFlameStreak) ...[
+                  const _FlameIcon(size: 14),
+                  const SizedBox(width: 3),
+                ],
+                if (streak > 0)
+                  Text(
+                    '$streak일 연속',
+                    style: _font(12, FontWeight.w400).copyWith(color: secondary),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (var i = 0; i < dots.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  dots[i],
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
