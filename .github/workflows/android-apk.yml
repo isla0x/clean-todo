@@ -1,6 +1,6 @@
 name: Android APK
 
-# 직접 실행했을 때만 돌아요. 끝나면 Releases 에 APK 가 올라가요.
+# 직접 실행했을 때만 돌아요. 끝나면 apk-output 브랜치에 haruring.apk 가 올라가요.
 on:
   workflow_dispatch:
 
@@ -65,10 +65,14 @@ jobs:
       - name: APK 만들기
         run: flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build.txt"
 
-      - name: Releases 에 올리기
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: apk-output 브랜치에 올리기
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk haruring.apk
-          tag="apk-${{ github.run_number }}"
-          gh release create "$tag" haruring.apk --title "하루링 APK $tag" --notes "안드로이드 설치용 APK (서명은 테스트용이에요)" --prerelease
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/apk/haruring.apk"
+          cd "$RUNNER_TEMP/apk"
+          git init -q -b apk-output
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -qm "APK ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk-output
