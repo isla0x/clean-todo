@@ -63,9 +63,16 @@ jobs:
         run: flutter pub get
 
       - name: APK 만들기
-        run: flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build.txt"
+        run: flutter build apk --release --target-platform android-arm64 2>&1 | tee "$RUNNER_TEMP/build.txt"
+
+      - name: APK 파일 올리기 (Actions 화면에서 받을 수 있어요)
+        uses: actions/upload-artifact@v4
+        with:
+          name: haruring-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
 
       - name: apk-output 브랜치에 올리기
+        continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/apk"
           cp build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/apk/haruring.apk"
