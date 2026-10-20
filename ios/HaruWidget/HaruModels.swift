@@ -408,7 +408,11 @@ struct HaruProvider: TimelineProvider {
         let midnight = HaruDate.addDays(today, 1)
         times.append(midnight)
 
-        let unique = Array(Set(times)).sorted().prefix(16)
+        // 분 단위로 글자가 바뀌도록, 가까운 일정이 있으면 앞으로 한 시간은 1분마다 새로 그려요
+        if times.count > 2, let next = times.filter({ $0 > now }).min(), next.timeIntervalSince(now) < 3600 {
+            for i in 1...60 { times.append(now.addingTimeInterval(Double(i) * 60)) }
+        }
+        let unique = Array(Set(times)).sorted().prefix(70)
         let entries = unique.map { t in
             HaruEntry(date: t, snap: Snapshot.make(items: items, pro: pro, at: t))
         }

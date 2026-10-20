@@ -1100,6 +1100,12 @@ class TodayPage extends StatelessWidget {
                 (e.date!.compareTo(today) < 0 && !e.done)))
         .toList();
 
+    // 어제 끝낸 일 (오늘 화면에서는 빠지지만, 다음 날 아침에 돌아볼 수 있게 보여줘요)
+    final yDate = DateTime(now.year, now.month, now.day - 1);
+    final yKey = dayKey(yDate);
+    final yesterdayDone =
+        itemsOnDay(items, yKey, today).where((e) => e.isDoneOn(yKey)).toList();
+
     final routineDone = routines.where((e) => e.isDoneOn(today)).length;
     final todoDone = todos.where((e) => e.isDoneOn(today)).length;
 
@@ -1162,6 +1168,20 @@ class TodayPage extends StatelessWidget {
                           children: [
                             for (final item in upcoming)
                               _ItemRow(store: store, item: item, now: now),
+                          ],
+                        ),
+                      if (yesterdayDone.isNotEmpty)
+                        _Section(
+                          header: '어제 한 일 · ${yesterdayDone.length}',
+                          children: [
+                            for (final item in yesterdayDone)
+                              _ItemRow(
+                                store: store,
+                                item: item,
+                                now: now,
+                                day: yKey,
+                                inCalendar: true,
+                              ),
                           ],
                         ),
                     ],
@@ -3577,6 +3597,8 @@ class _ProSheet extends StatefulWidget {
 
 class _ProSheetState extends State<_ProSheet> {
   final ProManager pro = ProManager.instance;
+  double _pull = 0; // 맨 위에서 아래로 당긴 최대 거리 (일정 이상이면 닫아요)
+  double _handleDrag = 0;
 
   @override
   void initState() {
@@ -3677,9 +3699,27 @@ class _ProSheetState extends State<_ProSheet> {
                 Column(
                   children: [
                     Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.only(top: 26, bottom: 16),
-                        child: _buildContent(context, view),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (n) {
+                          if (n.metrics.pixels < 0) {
+                            if (-n.metrics.pixels > _pull) {
+                              _pull = -n.metrics.pixels;
+                            }
+                          }
+                          if (n is ScrollEndNotification) {
+                            final close = _pull > 70;
+                            _pull = 0;
+                            if (close && mounted) Navigator.pop(context);
+                          }
+                          return false;
+                        },
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.only(top: 26, bottom: 16),
+                          child: _buildContent(context, view),
+                        ),
                       ),
                     ),
                     if (view != _ProView.purchased)
@@ -3689,10 +3729,27 @@ class _ProSheetState extends State<_ProSheet> {
                   ],
                 ),
                 Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 64,
+                  height: 36,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onVerticalDragStart: (_) => _handleDrag = 0,
+                    onVerticalDragUpdate: (d) => _handleDrag += d.delta.dy,
+                    onVerticalDragEnd: (d) {
+                      if (_handleDrag > 40 ||
+                          (d.primaryVelocity ?? 0) > 500) {
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ),
+                Positioned(
                   top: 7,
                   left: 0,
                   right: 0,
-                  child: Center(
+                  child: IgnorePointer(child: Center(
                     child: Container(
                       width: 36,
                       height: 5,
@@ -3701,7 +3758,7 @@ class _ProSheetState extends State<_ProSheet> {
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
-                  ),
+                  )),
                 ),
                 Positioned(
                   top: 14,

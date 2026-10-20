@@ -162,10 +162,21 @@ struct RelativeTail: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(due, style: .relative)
+            Text(Self.span(from: now, to: due))
             Text(due > now ? "후 시작" : "지남")
         }
         .lineLimit(1)
+    }
+
+    /// 초 단위 없이 분까지만: "2시간 40분" / "15분" / "1분 미만"
+    static func span(from now: Date, to due: Date) -> String {
+        let secs = abs(due.timeIntervalSince(now))
+        let mins = Int(secs / 60)
+        if mins < 1 { return "1분 미만" }
+        let h = mins / 60, m = mins % 60
+        if h == 0 { return "\(m)분" }
+        if m == 0 { return "\(h)시간" }
+        return "\(h)시간 \(m)분"
     }
 }
 
