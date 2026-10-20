@@ -22,6 +22,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # 영문·숫자 글꼴을 앱에 넣어서, 인터넷 없이도 처음부터 똑같이 보여요.
+    - assets/google_fonts/
   fonts:
     # 한글은 Pretendard (코드의 _font()가 영문·숫자는 Plus Jakarta Sans, 한글은 이 폰트로 보여줘요)
     - family: Pretendard
