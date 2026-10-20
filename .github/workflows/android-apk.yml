@@ -46,7 +46,7 @@ jobs:
                   '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
                   '            </intent-filter>\n'
                   '        </receiver>\n        ')
-          s = s.replace('<meta-data', recv + '<meta-data', 1)
+          s = s.replace('</application>', '    ' + recv.rstrip() + '\n    </application>', 1)
           open(m, 'w', encoding='utf-8').write(s)
           g = glob.glob('android/app/build.gradle*')[0]
           t = open(g, encoding='utf-8').read()
