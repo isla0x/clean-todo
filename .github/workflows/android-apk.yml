@@ -1,0 +1,74 @@
+name: Android APK
+
+# 직접 실행했을 때만 돌아요. 끝나면 Releases 에 APK 가 올라가요.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 안드로이드 폴더 만들기
+        run: |
+          flutter create --platforms=android --project-name clean_todo --org com.isla0x "$RUNNER_TEMP/scaffold" > /dev/null
+          cp -r "$RUNNER_TEMP/scaffold/android" android
+
+      - name: 알림·앱 이름 설정
+        run: |
+          python3 - <<'PY'
+          import re, glob
+          m = 'android/app/src/main/AndroidManifest.xml'
+          s = open(m, encoding='utf-8').read()
+          perms = ('<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
+                   '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
+                   '    <uses-permission android:name="android.permission.VIBRATE"/>\n    ')
+          s = s.replace('<application', perms + '<application', 1)
+          s = re.sub(r'android:label="[^"]*"', 'android:label="하루링"', s, count=1)
+          recv = ('<receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>\n'
+                  '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n'
+                  '            <intent-filter>\n'
+                  '                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n'
+                  '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
+                  '            </intent-filter>\n'
+                  '        </receiver>\n        ')
+          s = s.replace('<meta-data', recv + '<meta-data', 1)
+          open(m, 'w', encoding='utf-8').write(s)
+          g = glob.glob('android/app/build.gradle*')[0]
+          t = open(g, encoding='utf-8').read()
+          if g.endswith('.kts'):
+              t = t.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
+              t = t.rstrip() + '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n}\n'
+          else:
+              t = t.replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
+              t = t.rstrip() + '\n\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"\n}\n'
+          open(g, 'w', encoding='utf-8').write(t)
+          PY
+
+      - name: 패키지 받기
+        run: flutter pub get
+
+      - name: APK 만들기
+        run: flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build.txt"
+
+      - name: Releases 에 올리기
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk haruring.apk
+          tag="apk-${{ github.run_number }}"
+          gh release create "$tag" haruring.apk --title "하루링 APK $tag" --notes "안드로이드 설치용 APK (서명은 테스트용이에요)" --prerelease
