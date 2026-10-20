@@ -37,6 +37,11 @@ jobs:
       - name: 코드 검사
         run: flutter analyze 2>&1 | tee "$RUNNER_TEMP/out/analyze.txt" || true
 
+      - name: 테스트 + 화면 사진 뽑기
+        run: |
+          mkdir -p "$RUNNER_TEMP/out/shots"
+          SHOT_DIR="$RUNNER_TEMP/out/shots" flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/out/test.txt" || true
+
       - name: 웹 빌드
         run: flutter build web --release --no-web-resources-cdn 2>&1 | tee "$RUNNER_TEMP/out/build_web.txt" || true
 
