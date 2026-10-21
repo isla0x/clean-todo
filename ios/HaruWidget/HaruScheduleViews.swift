@@ -177,7 +177,16 @@ struct ScheduleMedium: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 
-            if s.timed.isEmpty {
+            if s.focus == nil && s.untimedLeft > 0 {
+                // 시간 일정이 다 끝났으면 시간 없는 투두를 보여줘요
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("시간 없음 · \(s.untimedLeft)개 남음")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.haruMuted)
+                    UntimedRows(s: s, limit: 3)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else if s.timed.isEmpty {
                 Spacer(minLength: 0)
             } else {
                 TimelineList(rows: scheduleWindow(s, size: 3), s: s)
