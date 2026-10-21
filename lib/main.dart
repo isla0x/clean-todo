@@ -1283,27 +1283,35 @@ class _ItemRow extends StatelessWidget {
             leadingSize: 18,
             leadingToTitle: 14,
             leading: _CheckCircle(checked: done),
-            title: Text(
-              item.title,
-              style: _font(14, FontWeight.w400, letterSpacing: -0.2).copyWith(
-                decoration: done ? TextDecoration.lineThrough : null,
-                color: done
-                    ? doneColor
-                    : CupertinoColors.label.resolveFrom(context),
-              ),
+            title: Row(
+              children: [
+                // 루틴은 매일 반복된다는 표시를 제목 맨 앞에 붙여요
+                if (item.isRoutine) ...[
+                  Icon(CupertinoIcons.repeat, size: 14, color: deep),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    item.title,
+                    overflow: TextOverflow.ellipsis,
+                    style: _font(14, FontWeight.w400, letterSpacing: -0.2)
+                        .copyWith(
+                      decoration: done ? TextDecoration.lineThrough : null,
+                      color: done
+                          ? doneColor
+                          : CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                ),
+              ],
             ),
             // 보조 문구(연속 일수, 날짜·시간)는 모두 오른쪽에 12px로 붙여요.
-            additionalInfo: (parts.isNotEmpty || item.isRoutine)
+            additionalInfo: parts.isNotEmpty
                 ? Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 루틴은 매일 반복된다는 표시 (입력창의 "매일" 아이콘과 같아요)
-                        if (item.isRoutine) ...[
-                          Icon(CupertinoIcons.repeat, size: 13, color: deep),
-                          if (parts.isNotEmpty) const SizedBox(width: 4),
-                        ],
                         if (streak >= kFlameStreak) ...[
                           const _FlameIcon(size: 14),
                           const SizedBox(width: 3),
