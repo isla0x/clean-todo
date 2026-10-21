@@ -35,11 +35,11 @@ String demoJson() {
   final tomorrow = key(now.add(const Duration(days: 1)));
   String ago(int n) => key(now.subtract(Duration(days: n)));
   final items = <Item>[
-    Item(id: 'r1', title: '물 2L 마시기', isRoutine: true, created: ago(12), doneDates: {for (var i = 1; i < 6; i++) ago(i), ago(8), ago(9), ago(10)}),
-    Item(id: 'r2', title: '영양제 먹기', isRoutine: true, time: '09:00', created: ago(12), doneDates: {today, ago(1), ago(2), ago(4), ago(5)}),
-    Item(id: 'r3', title: '스트레칭 10분', isRoutine: true, time: '22:30', notify: true, created: ago(9), doneDates: {ago(1), ago(2), ago(3)}),
-    Item(id: 't1', title: '팀 회의 준비', isRoutine: false, date: today, time: '23:50', notify: true, created: today),
-    Item(id: 't2', title: '장보기', isRoutine: false, date: today, created: today),
+    Item(id: 'r1', title: '물 2L 마시기', isRoutine: true, created: ago(12), tag: 'tg3', doneDates: {for (var i = 1; i < 6; i++) ago(i), ago(8), ago(9), ago(10)}),
+    Item(id: 'r2', title: '영양제 먹기', isRoutine: true, time: '09:00', created: ago(12), tag: 'tg3', doneDates: {today, ago(1), ago(2), ago(4), ago(5)}),
+    Item(id: 'r3', title: '스트레칭 10분', isRoutine: true, time: '22:30', notify: true, created: ago(9), tag: 'tg2', doneDates: {ago(1), ago(2), ago(3)}),
+    Item(id: 't1', title: '팀 회의 준비', isRoutine: false, date: today, time: '23:50', notify: true, created: today, tag: 'tg1'),
+    Item(id: 't2', title: '장보기', isRoutine: false, date: today, created: today, tag: 'tg4'),
     Item(id: 't3', title: '은행 다녀오기', isRoutine: false, date: today, time: '08:00', done: true, doneOn: today, created: today),
     Item(id: 't4', title: '치과 예약', isRoutine: false, date: tomorrow, time: '15:00', notify: true, created: today),
     Item(id: 't5', title: '택배 보내기', isRoutine: false, date: yest, done: true, doneOn: yest, created: ago(2)),
@@ -63,8 +63,11 @@ Future<void> setup(WidgetTester tester, {double keyboard = 0}) async {
   });
 }
 
+const demoTags =
+    '[{"id":"tg1","name":"일","color":0},{"id":"tg2","name":"운동","color":1},{"id":"tg3","name":"건강","color":5},{"id":"tg4","name":"집","color":3}]';
+
 Future<void> launch(WidgetTester tester) async {
-  SharedPreferences.setMockInitialValues({'items_v1': demoJson()});
+  SharedPreferences.setMockInitialValues({'items_v1': demoJson(), 'tags_v1': demoTags});
   await tester.pumpWidget(RepaintBoundary(key: shotKey, child: const TodoApp()));
   await settle(tester);
 }
@@ -126,6 +129,35 @@ void main() {
     await tester.enterText(find.byType(CupertinoTextField).first, '내일 오후 3시 치과 예약');
     await settle(tester);
     await shot(tester, 'Today_input');
+    await finish(tester);
+  });
+
+  shotTest('태그 편집', (tester) async {
+    await setup(tester);
+    await launch(tester);
+    await tester.tap(find.text('편집'));
+    await settle(tester);
+    await shot(tester, 'Tags');
+    await finish(tester);
+  });
+
+  shotTest('태그 걸러 보기', (tester) async {
+    await setup(tester);
+    await launch(tester);
+    await tester.tap(find.text('운동'));
+    await settle(tester);
+    await shot(tester, 'Today_tag');
+    await finish(tester);
+  });
+
+  shotTest('태그 고르며 입력', (tester) async {
+    await setup(tester, keyboard: 300);
+    await launch(tester);
+    await tester.enterText(find.byType(CupertinoTextField).first, '내일 7:00 수영 등록');
+    await settle(tester);
+    await tester.tap(find.text('운동').last);
+    await settle(tester);
+    await shot(tester, 'Input_tag');
     await finish(tester);
   });
 

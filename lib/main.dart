@@ -104,6 +104,7 @@ class Item {
     this.alert = AlertKind.at,
     this.created,
     this.doneOn,
+    this.tag,
   }) : doneDates = doneDates ?? <String>{};
 
   final String id;
@@ -134,6 +135,9 @@ class Item {
 
   /// 알림을 언제 보낼지 (정각 / 10분 전 / 1시간 전 / 당일 아침 / 전날 저녁)
   AlertKind alert;
+
+  /// 붙인 태그의 id (없으면 null)
+  String? tag;
 
   bool isDoneOn(String day) => isRoutine ? doneDates.contains(day) : done;
 
@@ -184,6 +188,7 @@ class Item {
         'alert': alert.name,
         'created': created,
         'doneOn': doneOn,
+        'tag': tag,
       };
 
   // 예전에 저장한 데이터(date·time·notify 없음)도 그대로 읽혀요.
@@ -201,6 +206,43 @@ class Item {
         alert: alertFromName(json['alert'] as String?),
         created: json['created'] as String?,
         doneOn: json['doneOn'] as String?,
+        tag: json['tag'] as String?,
+      );
+}
+
+// ───────────────────────── 태그 (색 점) ─────────────────────────
+
+/// 태그에 쓸 수 있는 색 8가지. 태그는 색 점과 이름으로 나뉘어요.
+const List<Color> kTagColors = [
+  Color(0xFF55A0FA), // 파랑
+  Color(0xFFFF7A59), // 주황
+  Color(0xFFF2B01E), // 노랑
+  Color(0xFF33B58A), // 초록
+  Color(0xFFA06CF0), // 보라
+  Color(0xFFEF5C8A), // 분홍
+  Color(0xFF2BB5C9), // 청록
+  Color(0xFF8E8E93), // 회색
+];
+
+const int kMaxTags = 8;
+
+class Tag {
+  Tag({required this.id, required this.name, required this.color});
+
+  final String id;
+  String name;
+
+  /// kTagColors 안에서 몇 번째 색인지
+  int color;
+
+  Color get tint => kTagColors[color.clamp(0, kTagColors.length - 1)];
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'color': color};
+
+  factory Tag.fromJson(Map<String, dynamic> json) => Tag(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        color: (json['color'] as int?) ?? 0,
       );
 }
 
@@ -414,12 +456,14 @@ class NewItemRequest {
     required this.isRoutine,
     required this.notify,
     required this.alert,
+    this.tag,
   });
 
   final ParsedInput parsed;
   final bool isRoutine;
   final bool notify;
   final AlertKind alert;
+  final String? tag;
 }
 
 // ───────────────────────── 항목 저장소 ─────────────────────────
@@ -427,8 +471,15 @@ class NewItemRequest {
 /// 모든 항목과 저장을 한곳에서 맡아요. 오늘·캘린더·기록 화면이 같은 데이터를 봐요.
 class ItemStore extends ChangeNotifier {
   static const _storageKey = 'items_v1';
+  static const _tagsKey = 'tags_v1';
 
   final List<Item> items = [];
+
+  /// 만들어 둔 태그들
+  final List<Tag> tags = [];
+
+  /// 오늘 화면에서 고른 태그 (null이면 전체)
+  String? filterTag;
   bool loaded = false;
   bool _disposed = false;
 
@@ -440,6 +491,13 @@ class ItemStore extends ChangeNotifier {
       items
         ..clear()
         ..addAll(list.map(Item.fromJson));
+    }
+    final rawTags = prefs.getString(_tagsKey);
+    if (rawTags != null) {
+      final list = (jsonDecode(rawTags) as List).cast<Map<String, dynamic>>();
+      tags
+        ..clear()
+        ..addAll(list.map(Tag.fromJson));
     }
     if (_disposed) return;
     loaded = true;
@@ -535,6 +593,60 @@ class ItemStore extends ChangeNotifier {
   }
 
   void add(Item item) => update(() => items.add(item));
+
+  Tag? tagById(String? id) {
+    if (id == null) return null;
+    for (final t in tags) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  Future<void> _saveTags() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tagsKey,
+      jsonEncode(tags.map((e) => e.toJson()).toList()),
+    );
+  }
+
+  /// 태그를 만들어요. 이름이 비었거나 8개를 넘으면 만들지 않아요.
+  Tag? addTag(String name, int color) {
+    final n = name.trim();
+    if (n.isEmpty || tags.length >= kMaxTags) return null;
+    final tag = Tag(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: n,
+      color: color,
+    );
+    tags.add(tag);
+    notifyListeners();
+    _saveTags();
+    return tag;
+  }
+
+  /// 태그를 지워요. 그 태그가 붙어 있던 항목은 태그만 빠져요.
+  void removeTag(Tag tag) {
+    tags.remove(tag);
+    if (filterTag == tag.id) filterTag = null;
+    var changed = false;
+    for (final e in items) {
+      if (e.tag == tag.id) {
+        e.tag = null;
+        changed = true;
+      }
+    }
+    notifyListeners();
+    _saveTags();
+    if (changed) _save();
+  }
+
+  void setFilter(String? id) {
+    if (filterTag == id) return;
+    HapticFeedback.selectionClick();
+    filterTag = id;
+    notifyListeners();
+  }
 
   void remove(Item item) {
     update(() => items.remove(item));
@@ -737,6 +849,10 @@ Future<void> showItemMenu(
             child: const Text('알림 끄기'),
           ),
         CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx, 'tag'),
+          child: Text(store.tags.isEmpty ? '태그 만들기' : '태그 바꾸기'),
+        ),
+        CupertinoActionSheetAction(
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(ctx, 'delete'),
           child: const Text('삭제'),
@@ -756,9 +872,54 @@ Future<void> showItemMenu(
     case 'off':
       store.update(() => item.notify = false);
       Notifier.instance.cancel(item);
+    case 'tag':
+      await changeItemTag(context, store, item);
     case 'delete':
       store.remove(item);
   }
+}
+
+/// 항목에 붙은 태그 바꾸기. 태그가 하나도 없으면 먼저 만들게 해요.
+Future<void> changeItemTag(
+  BuildContext context,
+  ItemStore store,
+  Item item,
+) async {
+  if (store.tags.isEmpty) {
+    await showTagEditor(context, store);
+    if (!context.mounted || store.tags.isEmpty) return;
+  }
+  final picked = await showCupertinoModalPopup<String>(
+    context: context,
+    builder: (ctx) => CupertinoActionSheet(
+      title: Text(item.title),
+      message: const Text('붙일 태그를 골라요'),
+      actions: [
+        for (final t in store.tags)
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, t.id),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _TagDot(color: t.tint, size: 10),
+                const SizedBox(width: 8),
+                Text(t.name),
+              ],
+            ),
+          ),
+        CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx, ''),
+          child: const Text('태그 없음'),
+        ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        onPressed: () => Navigator.pop(ctx),
+        child: const Text('취소'),
+      ),
+    ),
+  );
+  if (picked == null) return;
+  store.update(() => item.tag = picked.isEmpty ? null : picked);
 }
 
 /// 이미 만든 항목의 알림 시점 바꾸기 (처음 켤 때도 같은 시트)
@@ -854,6 +1015,7 @@ Future<void> addItemFromInput(
     notify: notify,
     alert: req.alert,
     created: dayKey(now),
+    tag: req.tag,
   );
   store.add(item);
   if (notify) Notifier.instance.schedule(item);
@@ -1073,18 +1235,26 @@ class TodayPage extends StatelessWidget {
     final today = dayKey(now);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    final routines = items.where((e) => e.isRoutine).toList();
+    // 위쪽 태그 칩으로 고른 태그만 보여줘요. (고르지 않으면 전부)
+    final filter = store.filterTag;
+    bool shown(Item e) => filter == null || e.tag == filter;
+
+    final routines = items.where((e) => e.isRoutine && shown(e)).toList();
 
     // 오늘 시간이 정해진 투두 → 타임라인 카드
     final timed = items
-        .where((e) => !e.isRoutine && e.date == today && e.time != null)
+        .where((e) =>
+            !e.isRoutine && e.date == today && e.time != null && shown(e))
         .toList()
       ..sort((a, b) => a.minutes!.compareTo(b.minutes!));
 
     // 앞으로 예정된 투두
     final upcoming = items
         .where((e) =>
-            !e.isRoutine && e.date != null && e.date!.compareTo(today) > 0)
+            !e.isRoutine &&
+            shown(e) &&
+            e.date != null &&
+            e.date!.compareTo(today) > 0)
         .toList()
       ..sort((a, b) => '${a.date} ${a.time ?? '00:00'}'
           .compareTo('${b.date} ${b.time ?? '00:00'}'));
@@ -1094,6 +1264,7 @@ class TodayPage extends StatelessWidget {
     final todos = items
         .where((e) =>
             !e.isRoutine &&
+            shown(e) &&
             !(e.date == today && e.time != null) &&
             (e.date == null ||
                 e.date == today ||
@@ -1125,6 +1296,7 @@ class TodayPage extends StatelessWidget {
                         style: TextStyle(fontSize: 12, color: secondary),
                       ),
                     ),
+                    if (store.loaded) _TagFilterRow(store: store),
                     if (!store.loaded)
                       const Padding(
                         padding: EdgeInsets.only(top: 80),
@@ -1164,6 +1336,20 @@ class TodayPage extends StatelessWidget {
                               _ItemRow(store: store, item: item, now: now),
                           ],
                         ),
+                      if (filter != null &&
+                          timed.isEmpty &&
+                          routines.isEmpty &&
+                          todos.isEmpty &&
+                          upcoming.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 48),
+                          child: Center(
+                            child: Text(
+                              '이 태그가 붙은 항목이 없어요',
+                              style: TextStyle(fontSize: 13, color: secondary),
+                            ),
+                          ),
+                        ),
                     ],
                     const SizedBox(height: 24),
                   ],
@@ -1177,6 +1363,7 @@ class TodayPage extends StatelessWidget {
           context: context,
           removeBottom: true,
           child: _InputBar(
+            store: store,
             onSubmit: (req) => addItemFromInput(context, store, req),
           ),
         ),
@@ -1245,6 +1432,7 @@ class _ItemRow extends StatelessWidget {
     final streak = (item.isRoutine && !inCalendar) ? streakOf(item, now) : 0;
     final doneColor = CupertinoColors.secondaryLabel.resolveFrom(context);
     final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final tag = store.tagById(item.tag);
 
     // 보조 문구: 루틴은 "오후 9:00 · 3일 연속",
     // 다른 날짜 투두는 "9월 18일 (금) · 오후 2:00"
@@ -1325,8 +1513,16 @@ class _ItemRow extends StatelessWidget {
                     ),
                   )
                 : null,
-            trailing: item.notify
-                ? Icon(CupertinoIcons.bell_fill, size: 13, color: deep)
+            trailing: (item.notify || tag != null)
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (tag != null) _TagDot(color: tag.tint, size: 10),
+                      if (tag != null && item.notify) const SizedBox(width: 8),
+                      if (item.notify)
+                        Icon(CupertinoIcons.bell_fill, size: 13, color: deep),
+                    ],
+                  )
                 : null,
           ),
         ),
@@ -1720,8 +1916,9 @@ class _TimelineDot extends StatelessWidget {
 //  · 입력창 위 미리보기: 어떻게 해석됐는지 바로 보여줘요.
 
 class _InputBar extends StatefulWidget {
-  const _InputBar({required this.onSubmit});
+  const _InputBar({required this.store, required this.onSubmit});
 
+  final ItemStore store;
   final void Function(NewItemRequest) onSubmit;
 
   @override
@@ -1744,6 +1941,13 @@ class _InputBarState extends State<_InputBar> {
 
   bool _routine = false;
 
+  /// 직접 고른 태그 id (없으면 null). 직접 고르지 않으면 위에서 걸러 보는 태그를 써요.
+  String? _tag;
+  bool _tagTouched = false;
+
+  String? get _effectiveTag =>
+      widget.store.tagById(_tagTouched ? _tag : widget.store.filterTag)?.id;
+
   /// null = 자동(시간이 있으면 켜짐), false = 직접 끔, true = 직접 켬
   bool? _bellOverride;
 
@@ -1754,6 +1958,7 @@ class _InputBarState extends State<_InputBar> {
   void initState() {
     super.initState();
     _controller.addListener(() => setState(() {}));
+    _focus.addListener(() => setState(() {}));
   }
 
   @override
@@ -1842,12 +2047,15 @@ class _InputBarState extends State<_InputBar> {
       isRoutine: _routine,
       notify: state.on,
       alert: state.kind ?? AlertKind.at,
+      tag: _effectiveTag,
     ));
     HapticFeedback.lightImpact();
     _controller.clear();
     setState(() {
       _bellOverride = null;
       _alert = AlertKind.at;
+      _tag = null;
+      _tagTouched = false;
     });
   }
 
@@ -1885,6 +2093,43 @@ class _InputBarState extends State<_InputBar> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 입력창을 누르면 태그를 고르는 줄이 나와요.
+                  if (_focus.hasFocus || text.isNotEmpty)
+                    ListenableBuilder(
+                      listenable: widget.store,
+                      builder: (context, _) {
+                        final selected = _effectiveTag;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: SizedBox(
+                            height: 34,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                for (final t in widget.store.tags) ...[
+                                  _TagChip(
+                                    label: t.name,
+                                    color: t.tint,
+                                    selected: selected == t.id,
+                                    onTap: () => setState(() {
+                                      _tagTouched = true;
+                                      _tag = selected == t.id ? null : t.id;
+                                    }),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                _TagChip(
+                                  label: '+ 새 태그',
+                                  selected: false,
+                                  onTap: () =>
+                                      showTagEditor(context, widget.store),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   AnimatedSize(
                     duration: const Duration(milliseconds: 160),
                     curve: Curves.easeOut,
@@ -4462,6 +4707,387 @@ class _LockPreview extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────── 태그 화면 조각들 ─────────────────────────
+
+/// 태그를 나타내는 작은 색 점
+class _TagDot extends StatelessWidget {
+  const _TagDot({required this.color, this.size = 10});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
+/// 태그 칩. 색이 없으면 "전체"나 "+ 새 태그" 같은 일반 칩이에요.
+class _TagChip extends StatelessWidget {
+  const _TagChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.color,
+  });
+
+  final String label;
+  final Color? color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final pill =
+        CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    final sep = CupertinoColors.separator.resolveFrom(context);
+    final label0 = CupertinoColors.label.resolveFrom(context);
+
+    final Color bg;
+    final Color fg;
+    final Border border;
+    if (selected && color == null) {
+      bg = deep;
+      fg = CupertinoColors.white;
+      border = Border.all(color: deep, width: 1);
+    } else if (selected) {
+      bg = color!.withAlpha(46);
+      fg = label0;
+      border = Border.all(color: color!, width: 1.5);
+    } else {
+      bg = pill;
+      fg = color == null ? deep : label0;
+      border = Border.all(color: sep, width: 0.5);
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(16),
+          border: border,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (color != null) ...[
+              _TagDot(color: color!, size: 9),
+              const SizedBox(width: 7),
+            ],
+            Text(
+              label,
+              style: _font(13, selected ? FontWeight.w700 : FontWeight.w600)
+                  .copyWith(color: fg),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 오늘 화면 위쪽의 태그 칩 줄. 칩을 누르면 그 태그만 보여줘요.
+class _TagFilterRow extends StatelessWidget {
+  const _TagFilterRow({required this.store});
+
+  final ItemStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final tags = store.tags;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Row(
+        children: [
+          if (tags.isNotEmpty) ...[
+            _TagChip(
+              label: '전체',
+              selected: store.filterTag == null,
+              onTap: () => store.setFilter(null),
+            ),
+            const SizedBox(width: 6),
+            for (final t in tags) ...[
+              _TagChip(
+                label: t.name,
+                color: t.tint,
+                selected: store.filterTag == t.id,
+                onTap: () => store.setFilter(t.id),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ],
+          _TagChip(
+            label: tags.isEmpty ? '+ 태그 만들기' : '편집',
+            selected: false,
+            onTap: () => showTagEditor(context, store),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 태그를 만들고 지우는 시트. 이름을 쓰고 색을 고르면 끝이에요. (밀어서 삭제)
+Future<void> showTagEditor(BuildContext context, ItemStore store) {
+  return showCupertinoModalPopup<void>(
+    context: context,
+    builder: (_) => _TagEditorSheet(store: store),
+  );
+}
+
+class _TagEditorSheet extends StatefulWidget {
+  const _TagEditorSheet({required this.store});
+
+  final ItemStore store;
+
+  @override
+  State<_TagEditorSheet> createState() => _TagEditorSheetState();
+}
+
+class _TagEditorSheetState extends State<_TagEditorSheet> {
+  final TextEditingController _name = TextEditingController();
+  int _color = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _color = _nextFreeColor();
+    _name.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  /// 아직 안 쓴 색 중 첫 번째 (다 썼으면 첫 색)
+  int _nextFreeColor() {
+    final used = widget.store.tags.map((t) => t.color).toSet();
+    for (var i = 0; i < kTagColors.length; i++) {
+      if (!used.contains(i)) return i;
+    }
+    return 0;
+  }
+
+  void _add() {
+    final t = widget.store.addTag(_name.text, _color);
+    if (t == null) return;
+    HapticFeedback.lightImpact();
+    _name.clear();
+    setState(() => _color = _nextFreeColor());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = CupertinoColors.systemGroupedBackground.resolveFrom(context);
+    final card =
+        CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: DefaultTextStyle(
+        style: _font(15, FontWeight.w400).copyWith(color: label),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.only(bottom: inset),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: ListenableBuilder(
+              listenable: widget.store,
+              builder: (context, _) {
+                final tags = widget.store.tags;
+                final full = tags.length >= kMaxTags;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(width: 4),
+                          Text('태그',
+                              style: _font(20, FontWeight.w700)
+                                  .copyWith(color: label)),
+                          const Spacer(),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('완료',
+                                style: _font(16, FontWeight.w600)
+                                    .copyWith(color: deep)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (tags.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+                          child: Text(
+                            '색 점으로 할 일을 나눠 볼 수 있어요',
+                            style: TextStyle(fontSize: 13, color: secondary),
+                          ),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 230),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(kCardRadius),
+                            child: ListView(
+                              shrinkWrap: true,
+                              padding: EdgeInsets.zero,
+                              children: [
+                                for (final t in tags)
+                                  Dismissible(
+                                    key: ValueKey('tag-${t.id}'),
+                                    direction: DismissDirection.endToStart,
+                                    background: Container(
+                                      color: CupertinoColors.systemRed,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 22),
+                                      child: const Icon(CupertinoIcons.delete,
+                                          color: CupertinoColors.white),
+                                    ),
+                                    onDismissed: (_) {
+                                      HapticFeedback.mediumImpact();
+                                      widget.store.removeTag(t);
+                                      setState(() => _color = _nextFreeColor());
+                                    },
+                                    child: Container(
+                                      color: card,
+                                      height: 50,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16),
+                                      child: Row(
+                                        children: [
+                                          _TagDot(color: t.tint, size: 14),
+                                          const SizedBox(width: 14),
+                                          Expanded(child: Text(t.name)),
+                                          Text(
+                                            '밀어서 삭제',
+                                            style: TextStyle(
+                                                fontSize: 11, color: secondary),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      if (full)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            '태그는 최대 $kMaxTags개까지 만들 수 있어요',
+                            style: TextStyle(fontSize: 12, color: secondary),
+                          ),
+                        )
+                      else ...[
+                        Container(
+                          decoration: BoxDecoration(
+                            color: card,
+                            borderRadius: BorderRadius.circular(kCardRadius),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 4, 8, 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  _TagDot(color: kTagColors[_color], size: 14),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: CupertinoTextField(
+                                      controller: _name,
+                                      placeholder: '새 태그 이름',
+                                      maxLength: 10,
+                                      decoration: null,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      onSubmitted: (_) => _add(),
+                                    ),
+                                  ),
+                                  CupertinoButton(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    onPressed:
+                                        _name.text.trim().isEmpty ? null : _add,
+                                    child: Text('추가',
+                                        style: _font(15, FontWeight.w600)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 10,
+                                children: [
+                                  for (var i = 0; i < kTagColors.length; i++)
+                                    GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.selectionClick();
+                                        setState(() => _color = i);
+                                      },
+                                      child: Container(
+                                        width: 34,
+                                        height: 34,
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: _color == i
+                                                ? label
+                                                : const Color(0x00000000),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: _TagDot(
+                                            color: kTagColors[i], size: 26),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
