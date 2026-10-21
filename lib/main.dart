@@ -151,11 +151,10 @@ class Item {
   }
 
   /// 그 날의 목록·달력에 나타나는 항목인지.
-  /// 투두는 날짜가 그 날일 때, 루틴은 기록 시작일부터 오늘까지 매일이에요.
+  /// 투두는 날짜가 그 날일 때, 루틴은 기록 시작일부터 앞으로도 매일이에요.
   bool scheduledOn(String day, String today) {
     if (!isRoutine) return date == day;
-    if (day.compareTo(today) > 0) return false;
-    if (day == today) return true;
+    if (day.compareTo(today) >= 0) return true; // 오늘과 앞으로의 날은 매일 나와요
     final s = startDay;
     return s != null && day.compareTo(s) >= 0;
   }
@@ -573,6 +572,7 @@ class ItemStore extends ChangeNotifier {
 
   /// [day] 날짜의 완료 표시를 뒤집어요. (투두는 날짜와 상관없이 완료 여부 하나뿐이에요)
   void toggle(Item item, String day) {
+    if (item.isRoutine && day.compareTo(dayKey(DateTime.now())) > 0) return; // 앞날 루틴은 미리 체크 못 해요
     HapticFeedback.selectionClick();
     update(() {
       if (item.isRoutine) {
@@ -2896,18 +2896,13 @@ BoxDecoration _cardDecoration(BuildContext context) {
 
 /// [day]에 나타나는 항목: 루틴(기록 시작일~오늘) → 시간 있는 투두(시간순) → 시간 없는 투두
 List<Item> itemsOnDay(List<Item> items, String day, String today) {
-  final routines =
-      items.where((e) => e.isRoutine && e.scheduledOn(day, today)).toList();
-  final todos = items.where((e) => !e.isRoutine && e.date == day).toList()
-    ..sort((a, b) {
-      final am = a.minutes;
-      final bm = b.minutes;
-      if (am == null && bm == null) return 0;
-      if (am == null) return 1;
-      if (bm == null) return -1;
-      return am.compareTo(bm);
-    });
-  return [...routines, ...todos];
+  final all = items.where((e) => e.scheduledOn(day, today)).toList();
+  // 시간 있는 것은 시간순(루틴·투두 함께), 그다음 시간 없는 루틴, 시간 없는 투두
+  final timed = all.where((e) => e.minutes != null).toList()
+    ..sort((a, b) => a.minutes!.compareTo(b.minutes!));
+  final untimedRoutines = all.where((e) => e.minutes == null && e.isRoutine);
+  final untimedTodos = all.where((e) => e.minutes == null && !e.isRoutine);
+  return [...timed, ...untimedRoutines, ...untimedTodos];
 }
 
 /// [day]에 해야 하는 항목 수와 끝낸 항목 수
@@ -2920,6 +2915,7 @@ List<Item> itemsOnDay(List<Item> items, String day, String today) {
   var done = 0;
   for (final e in items) {
     if (!e.scheduledOn(day, today)) continue;
+    if (e.isRoutine && day.compareTo(today) > 0) continue; // 앞날의 루틴은 달력 점에 안 세요
     total++;
     if (e.isDoneOn(day)) done++;
   }
