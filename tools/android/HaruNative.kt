@@ -159,8 +159,8 @@ class HaruNative(private val activity: Activity, private val channel: MethodChan
                 .setProductType(BillingClient.ProductType.INAPP)
                 .build()
             val params = QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
-            c.queryProductDetailsAsync(params) { r, details ->
-                done(if (r.responseCode == BillingClient.BillingResponseCode.OK) details.firstOrNull() else null)
+            c.queryProductDetailsAsync(params) { r, res ->
+                done(if (r.responseCode == BillingClient.BillingResponseCode.OK) res.productDetailsList.firstOrNull() else null)
             }
         }
     }

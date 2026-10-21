@@ -38,7 +38,7 @@ if notifications:
         t = t.replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
         t = t.rstrip() + '\n\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"\n}\n'
 if haru:
-    dep = 'com.android.billingclient:billing:7.1.1'
+    dep = 'com.android.billingclient:billing:8.0.0'
     t = t.rstrip() + ('\n\ndependencies {\n    implementation("%s")\n}\n' % dep if kts
                       else '\n\ndependencies {\n    implementation "%s"\n}\n' % dep)
 if os.environ.get('KEYSTORE_PATH'):
