@@ -1,0 +1,77 @@
+name: Android 스토어용 AAB
+
+# 직접 실행했을 때만 돌아요. 끝나면 ci-android-release 브랜치에 haruring.aab 와 스토어용 아이콘이 올라가요.
+# 서명 키는 저장소 Secrets(ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS)에서 읽어요.
+on:
+  workflow_dispatch:
+    inputs:
+      unsigned:
+        description: '서명 없이 시험 빌드 (스토어에는 못 올려요)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 서명 키 확인
+        run: |
+          if [ "${{ inputs.unsigned }}" = "true" ]; then echo "시험 빌드(서명 없음)"; exit 0; fi
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "서명 키(Secrets)가 아직 없어요. 저장소 Settings > Secrets 에 ANDROID_* 4개를 넣어 주세요."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 안드로이드 폴더 만들기 (패키지 이름 com.isla0x.haruring)
+        run: |
+          flutter create --platforms=android --project-name haruring --org com.isla0x "$RUNNER_TEMP/scaffold" > /dev/null
+          cp -r "$RUNNER_TEMP/scaffold/android" android
+
+      - name: 앱 이름·아이콘·서명 설정
+        run: |
+          pip install pillow > /dev/null
+          python3 tools/android_setup.py "하루링" ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png --notifications
+
+      - name: 패키지 받기
+        run: flutter pub get
+
+      - name: AAB 만들기
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          flutter build appbundle --release > "$RUNNER_TEMP/out/build_aab.txt" 2>&1 || echo "빌드 실패" >> "$RUNNER_TEMP/out/build_aab.txt"
+          tail -40 "$RUNNER_TEMP/out/build_aab.txt"
+          cp build/app/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/out/haruring.aab"
+          cp store/icon-512.png "$RUNNER_TEMP/out/icon-512.png"
+
+      - name: 결과를 ci-android-release 브랜치에 올리기
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/out"
+          git init -q -b ci-android-release
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -qm "Android AAB ${{ github.sha }}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-android-release
