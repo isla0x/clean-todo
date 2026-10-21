@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
@@ -3950,8 +3951,12 @@ class _ProSheetState extends State<_ProSheet> {
                               _pull = -n.metrics.pixels;
                             }
                           }
-                          if (n is ScrollEndNotification) {
-                            final close = _pull > 70;
+                          // 손가락을 떼는 순간(튕겨 돌아오기 전)에 바로 닫아요.
+                          final released = (n is UserScrollNotification &&
+                                  n.direction == ScrollDirection.idle) ||
+                              n is ScrollEndNotification;
+                          if (released) {
+                            final close = _pull > 60;
                             _pull = 0;
                             if (close && mounted) Navigator.pop(context);
                           }
