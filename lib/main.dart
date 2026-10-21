@@ -73,8 +73,11 @@ class TodoApp extends StatelessWidget {
       // 아이폰 설정의 글자 크기는 그대로 반영하면서 앱 전체 글자를 조금 키워요.
       builder: (context, child) {
         final mq = MediaQuery.of(context);
-        final scale =
-            (mq.textScaler.scale(1.0) * kTextBoost).clamp(1.0, 1.6).toDouble();
+        // 안드로이드는 폰마다 글자 크기 설정이 달라 아이폰과 비율이 어긋나서, 고정 비율로 맞춰요.
+        final system = defaultTargetPlatform == TargetPlatform.android
+            ? 1.0
+            : mq.textScaler.scale(1.0);
+        final scale = (system * kTextBoost).clamp(1.0, 1.6).toDouble();
         return MediaQuery(
           data: mq.copyWith(textScaler: TextScaler.linear(scale)),
           // 빈 배경을 누르면 키보드가 내려가요. (목록·버튼은 원래대로 눌려요)

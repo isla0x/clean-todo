@@ -1,7 +1,7 @@
 name: clean_todo
 description: 투두, 루틴, 일정을 한 줄로 적는 iOS 스타일 할 일 앱
 publish_to: 'none'
-version: 0.1.0+17
+version: 0.1.0+18
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
