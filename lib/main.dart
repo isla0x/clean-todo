@@ -1293,12 +1293,17 @@ class _ItemRow extends StatelessWidget {
               ),
             ),
             // 보조 문구(연속 일수, 날짜·시간)는 모두 오른쪽에 12px로 붙여요.
-            additionalInfo: parts.isNotEmpty
+            additionalInfo: (parts.isNotEmpty || item.isRoutine)
                 ? Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 루틴은 매일 반복된다는 표시 (입력창의 "매일" 아이콘과 같아요)
+                        if (item.isRoutine) ...[
+                          Icon(CupertinoIcons.repeat, size: 13, color: deep),
+                          if (parts.isNotEmpty) const SizedBox(width: 4),
+                        ],
                         if (streak >= kFlameStreak) ...[
                           const _FlameIcon(size: 14),
                           const SizedBox(width: 3),
