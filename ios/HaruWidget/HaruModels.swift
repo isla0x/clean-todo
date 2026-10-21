@@ -263,10 +263,10 @@ struct Snapshot {
     }
     var maxStreak: Int { routines.map { haruStreak($0, now: date) }.max() ?? 0 }
 
-    /// 오늘 시간이 정해진 투두 (시간순)
+    /// 오늘 시간이 정해진 일정 (투두 + 시간 있는 루틴, 시간순)
     var timed: [WItem] {
         items
-            .filter { !$0.isRoutine && $0.date == today && $0.time != nil }
+            .filter { ($0.isRoutine || $0.date == today) && $0.time != nil }
             .sorted { ($0.minutes ?? 0) < ($1.minutes ?? 0) }
     }
 

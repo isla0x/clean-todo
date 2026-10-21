@@ -1241,10 +1241,10 @@ class TodayPage extends StatelessWidget {
 
     final routines = items.where((e) => e.isRoutine && shown(e)).toList();
 
-    // 오늘 시간이 정해진 투두 → 타임라인 카드
+    // 오늘 시간이 정해진 일정(투두 + 매일 반복되는 루틴) → 타임라인 카드
     final timed = items
         .where((e) =>
-            !e.isRoutine && e.date == today && e.time != null && shown(e))
+            (e.isRoutine || e.date == today) && e.time != null && shown(e))
         .toList()
       ..sort((a, b) => a.minutes!.compareTo(b.minutes!));
 
@@ -1670,8 +1670,9 @@ class _TimelineCard extends StatelessWidget {
 
     // 다음 일정 = 아직 안 한 것 중 가장 이른 것 (시간이 지났어도 "N분 지남"으로 보여줘요)
     Item? next;
+    final todayKey = dayKey(now);
     for (final it in timed) {
-      if (!it.done) {
+      if (!it.isDoneOn(todayKey)) {
         next = it;
         break;
       }
@@ -1782,7 +1783,7 @@ class _TimelineRow extends StatelessWidget {
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     final deep = CupertinoDynamicColor.resolve(kAccentDeep, context);
     final line = CupertinoColors.separator.resolveFrom(context);
-    final done = item.done;
+    final done = item.isDoneOn(dayKey(DateTime.now()));
     final highlight = isNext && !done;
 
     final state = done
@@ -1823,6 +1824,10 @@ class _TimelineRow extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
+                      if (item.isRoutine) ...[
+                        Icon(CupertinoIcons.repeat, size: 12, color: deep),
+                        const SizedBox(width: 5),
+                      ],
                       Flexible(
                         child: Text(
                           item.title,
