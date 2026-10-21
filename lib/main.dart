@@ -1090,7 +1090,7 @@ class TodayPage extends StatelessWidget {
           .compareTo('${b.date} ${b.time ?? '00:00'}'));
 
     // 그 외 투두: 날짜 없음 + 오늘(시간 없음) + 못 끝낸 지난 날짜
-    // (지난 날짜인데 이미 끝낸 것은 오늘 화면에서 빠져요)
+    // (지난 날짜에 끝낸 일은 오늘 화면에 안 나오고 캘린더에서만 봐요)
     final todos = items
         .where((e) =>
             !e.isRoutine &&
@@ -1099,12 +1099,6 @@ class TodayPage extends StatelessWidget {
                 e.date == today ||
                 (e.date!.compareTo(today) < 0 && !e.done)))
         .toList();
-
-    // 어제 끝낸 일 (오늘 화면에서는 빠지지만, 다음 날 아침에 돌아볼 수 있게 보여줘요)
-    final yDate = DateTime(now.year, now.month, now.day - 1);
-    final yKey = dayKey(yDate);
-    final yesterdayDone =
-        itemsOnDay(items, yKey, today).where((e) => e.isDoneOn(yKey)).toList();
 
     final routineDone = routines.where((e) => e.isDoneOn(today)).length;
     final todoDone = todos.where((e) => e.isDoneOn(today)).length;
@@ -1168,20 +1162,6 @@ class TodayPage extends StatelessWidget {
                           children: [
                             for (final item in upcoming)
                               _ItemRow(store: store, item: item, now: now),
-                          ],
-                        ),
-                      if (yesterdayDone.isNotEmpty)
-                        _Section(
-                          header: '어제 한 일 · ${yesterdayDone.length}',
-                          children: [
-                            for (final item in yesterdayDone)
-                              _ItemRow(
-                                store: store,
-                                item: item,
-                                now: now,
-                                day: yKey,
-                                inCalendar: true,
-                              ),
                           ],
                         ),
                     ],
