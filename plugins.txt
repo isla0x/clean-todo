@@ -1,0 +1,38 @@
+total 0
+drwxr-xr-x   3 runner  staff   96 Oct 21 14:31 .
+drwxr-xr-x  15 runner  staff  480 Oct 21 14:31 ..
+drwxr-xr-x   5 runner  staff  160 Oct 21 14:31 HaruWidget.appex
+{
+  "BuildMachineOSBuild" => "25G83"
+  "CFBundleDevelopmentRegion" => "en"
+  "CFBundleDisplayName" => "하루링"
+  "CFBundleExecutable" => "HaruWidget"
+  "CFBundleIdentifier" => "com.isla0x.cleanTodo.HaruWidget"
+  "CFBundleInfoDictionaryVersion" => "6.0"
+  "CFBundleName" => "HaruWidget"
+  "CFBundlePackageType" => "XPC!"
+  "CFBundleShortVersionString" => "0.1.0"
+  "CFBundleSupportedPlatforms" => [
+    0 => "iPhoneOS"
+  ]
+  "CFBundleVersion" => "19"
+  "DTCompiler" => "com.apple.compilers.llvm.clang.1_0"
+  "DTPlatformBuild" => "23F81a"
+  "DTPlatformName" => "iphoneos"
+  "DTPlatformVersion" => "26.5"
+  "DTSDKBuild" => "23F81a"
+  "DTSDKName" => "iphoneos26.5"
+  "DTXcode" => "2660"
+  "DTXcodeBuild" => "17F113"
+  "MinimumOSVersion" => "16.0"
+  "NSExtension" => {
+    "NSExtensionPointIdentifier" => "com.apple.widgetkit-extension"
+  }
+  "UIDeviceFamily" => [
+    0 => 1
+    1 => 2
+  ]
+  "UIRequiredDeviceCapabilities" => [
+    0 => "arm64"
+  ]
+}

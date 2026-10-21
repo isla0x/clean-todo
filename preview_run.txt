@@ -1,0 +1,4 @@
+시뮬레이터: B34C2F57-B98B-4C84-96E2-3170887BA2DB
+IOSurfaceClientSetSurfaceNotify failed e00002c7
+saved home
+saved lock

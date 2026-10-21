@@ -1,0 +1,13 @@
+Resolving dependencies...
+Downloading packages...
+  material_color_utilities 0.13.0 (0.13.1 available)
+  shared_preferences_android 2.5.0 (2.5.1 available)
+  test_api 0.7.12 (0.7.15 available)
+Got dependencies!
+3 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Warning: Building for device with codesigning disabled. You will have to manually codesign before deploying to device.
+Building com.isla0x.cleanTodo for device (ios-release)...
+Running Xcode build...                                          
+Xcode build done.                                           109.9s
+✓ Built build/ios/iphoneos/Runner.app (25.8MB)
