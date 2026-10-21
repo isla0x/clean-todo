@@ -1733,7 +1733,12 @@ class _TimelineCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 22, top: 2),
               child: Text(
-                untilLabel(next.dueAt!, now),
+                untilLabel(
+                  next.dueAt ??
+                      DateTime(now.year, now.month, now.day,
+                          next.minutes! ~/ 60, next.minutes! % 60),
+                  now,
+                ),
                 style: TextStyle(fontSize: 12, color: secondary),
               ),
             ),
