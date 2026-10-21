@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/haru_widget_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/head"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:text="오늘"
+        android:textColor="#1F2937"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/msg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#6B7280"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <LinearLayout android:id="@+id/row0" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp" android:visibility="gone">
+        <TextView android:id="@+id/mark0" android:layout_width="24dp" android:layout_height="wrap_content" android:textSize="17sp" />
+        <TextView android:id="@+id/title0" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row1" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp" android:visibility="gone">
+        <TextView android:id="@+id/mark1" android:layout_width="24dp" android:layout_height="wrap_content" android:textSize="17sp" />
+        <TextView android:id="@+id/title1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row2" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp" android:visibility="gone">
+        <TextView android:id="@+id/mark2" android:layout_width="24dp" android:layout_height="wrap_content" android:textSize="17sp" />
+        <TextView android:id="@+id/title2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row3" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp" android:visibility="gone">
+        <TextView android:id="@+id/mark3" android:layout_width="24dp" android:layout_height="wrap_content" android:textSize="17sp" />
+        <TextView android:id="@+id/title3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/row4" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp" android:visibility="gone">
+        <TextView android:id="@+id/mark4" android:layout_width="24dp" android:layout_height="wrap_content" android:textSize="17sp" />
+        <TextView android:id="@+id/title4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/more"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="2dp"
+        android:textColor="#9AA3B2"
+        android:textSize="12sp"
+        android:visibility="gone" />
+</LinearLayout>

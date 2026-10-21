@@ -5,6 +5,7 @@ import re, sys, glob, os
 
 label, icon_path = sys.argv[1], sys.argv[2]
 notifications = '--notifications' in sys.argv
+haru = '--haru-native' in sys.argv  # 하루링: 구글 결제 + 홈 화면 위젯
 
 # 1) 매니페스트: 앱 이름, (알림 앱이면) 권한과 알림 수신기
 m = 'android/app/src/main/AndroidManifest.xml'
@@ -36,6 +37,10 @@ if notifications:
     else:
         t = t.replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
         t = t.rstrip() + '\n\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"\n}\n'
+if haru:
+    dep = 'com.android.billingclient:billing:7.1.1'
+    t = t.rstrip() + ('\n\ndependencies {\n    implementation("%s")\n}\n' % dep if kts
+                      else '\n\ndependencies {\n    implementation "%s"\n}\n' % dep)
 if os.environ.get('KEYSTORE_PATH'):
     if kts:
         sign = ('signingConfigs {\n        create("release") {\n'
@@ -56,6 +61,34 @@ if os.environ.get('KEYSTORE_PATH'):
         t = t.replace('buildTypes {', sign, 1)
         t = t.replace('signingConfigs.debug', 'signingConfigs.release')
 open(g, 'w', encoding='utf-8').write(t)
+
+# 2.5) 하루링 전용: 구글 결제 다리 + 홈 화면 위젯
+if haru:
+    import shutil
+    kdir = 'android/app/src/main/kotlin/com/isla0x/haruring'
+    os.makedirs(kdir, exist_ok=True)
+    for f in glob.glob('android/app/src/main/kotlin/**/MainActivity.kt', recursive=True):
+        os.remove(f)
+    for f in ('MainActivity.kt', 'HaruNative.kt', 'HaruWidget.kt'):
+        shutil.copy(f'tools/android/{f}', f'{kdir}/{f}')
+    res = 'android/app/src/main/res'
+    for d in ('layout', 'drawable', 'xml', 'values'):
+        os.makedirs(f'{res}/{d}', exist_ok=True)
+    shutil.copy('tools/android/res/haru_widget.xml', f'{res}/layout/haru_widget.xml')
+    shutil.copy('tools/android/res/haru_widget_bg.xml', f'{res}/drawable/haru_widget_bg.xml')
+    shutil.copy('tools/android/res/haru_widget_info.xml', f'{res}/xml/haru_widget_info.xml')
+    open(f'{res}/values/haru_strings.xml', 'w', encoding='utf-8').write(
+        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+        '    <string name="haru_widget_desc">오늘 할 일과 루틴을 홈 화면에서 확인하고 체크해요 (PRO)</string>\n</resources>\n')
+    s2 = open(m, encoding='utf-8').read()
+    wrecv = ('<receiver android:name=".HaruWidget" android:exported="true" android:label="하루링 오늘">\n'
+             '            <intent-filter>\n'
+             '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>\n'
+             '            </intent-filter>\n'
+             '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/haru_widget_info"/>\n'
+             '        </receiver>\n        ')
+    s2 = s2.replace('</application>', '    ' + wrecv.rstrip() + '\n    </application>', 1)
+    open(m, 'w', encoding='utf-8').write(s2)
 
 # 3) 아이콘: 적응형 아이콘(배경색 + 가운데 그림) 과 옛 방식 아이콘, 스토어용 512
 from PIL import Image

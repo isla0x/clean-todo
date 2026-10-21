@@ -671,7 +671,10 @@ class ItemStore extends ChangeNotifier {
 
 const MethodChannel _native = MethodChannel('haruring/native');
 
-bool get _onIphone => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+bool get _onIphone =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android);
 
 class WidgetBridge {
   /// 항목 목록과 PRO 상태를 위젯이 읽는 공유 저장소에 적고, 위젯을 새로 그리게 해요.
@@ -3899,7 +3902,7 @@ class _ProSheetState extends State<_ProSheet> {
       case 'pending':
         await _notice('결제 승인을 기다리고 있어요', '승인되면 자동으로 PRO가 열려요.');
       case 'error:iphone':
-        await _notice('아이폰에서만 결제할 수 있어요');
+        await _notice('휴대폰에서만 결제할 수 있어요');
       case 'error:product':
         await _notice('상품 정보를 불러오지 못했어요', '잠시 뒤에 다시 시도해 주세요.');
       default:
